@@ -1,0 +1,22 @@
+{
+    "name": "enna/enna-orm",
+    "description": "enna rom",
+    "type": "library",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "enna",
+            "email": "w1069103107@outlook.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.3.0",
+        "ext-json": "*",
+        "ext-pdo": "*"
+    },
+    "autoload": {
+        "psr-4":{
+            "Enna\\Orm\\":"src"
+        }
+    }
+}
