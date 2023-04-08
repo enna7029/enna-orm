@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db\Concern;
 
+/**
+ * JOIN和VIEW查询
+ * Trait JoinAndViewQuery
+ * @package Enna\Orm\Db\Concern
+ */
 trait JoinAndViewQuery
 {
     /**

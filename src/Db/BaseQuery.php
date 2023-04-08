@@ -3,12 +3,16 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db;
 
+use Enna\Framework\Cache\TagSet;
 use Enna\Orm\Contract\ConnectionInterface;
 use Enna\Orm\Db\Exception\DbException;
+use Enna\Framework\Helper\Str;
 
 abstract class BaseQuery
 {
     use Concern\ModelRelationQuery;
+    use Concern\Transaction;
+    use Concern\WhereQuery;
 
     /**
      * 当前数据库连接对象
@@ -279,6 +283,53 @@ abstract class BaseQuery
     }
 
     /**
+     * Note: 通过select方式插入记录
+     * Date: 2023-04-03
+     * Time: 11:58
+     * @param array $fields 要插入的数据表字段名
+     * @param string $table 要插入的数据表名
+     * @return int
+     */
+    public function insertSelect(array $fields, string $table)
+    {
+        return $this->connection->selectInsert($fields, $table);
+    }
+
+    /**
+     * Note: 去除查询参数
+     * Date: 2023-04-03
+     * Time: 16:17
+     * @param string $option 参数名
+     * @return $this
+     */
+    public function removeOption(string $option = '')
+    {
+        if ($option === '') {
+            $this->options = [];
+            $this->bind = [];
+        } elseif (isset($this->options[$option])) {
+            unset($this->options[$option]);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Note: 设置当前查询参数
+     * Date: 2023-04-03
+     * Time: 16:19
+     * @param string $option 参数名
+     * @param mixed $value 参数值
+     * @return $this
+     */
+    public function setOption(string $option, $value)
+    {
+        $this->options[$option] = $value;
+
+        return $this;
+    }
+
+    /**
      * Note: 分析表达式
      * Date: 2023-03-29
      * Time: 16:20
@@ -351,7 +402,8 @@ abstract class BaseQuery
     public function __call(string $method, array $args)
     {
         if (strtolower(substr($method, 0, 5)) == 'getby') {
-
+            $field = Str::sanke(substr($method, 5));
+            return $this->where($field, '=', $args[0])->find();
         } elseif (strtolower(substr($method, 0, 10)) == 'getfieldby') {
 
         } elseif (strtolower(substr($method, 0, 7)) == 'whereor') {

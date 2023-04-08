@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db\Concern;
 
+/**
+ * 参数绑定
+ * Trait ParamsBind
+ * @package Enna\Orm\Db\Concern
+ */
 trait ParamsBind
 {
     /**

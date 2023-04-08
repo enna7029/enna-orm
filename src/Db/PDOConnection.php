@@ -1251,39 +1251,281 @@ class PDOConnection extends Connection
         return $this->pdoExecute($query, $sql, $query->getBind());
     }
 
-    public function selectInsert(BaseQuery $query)
+    /**
+     * Note: 通过select方式插入记录
+     * Date: 2023-04-03
+     * Time: 11:43
+     * @param BaseQuery $query 查询对象
+     * @param array $fields 要插入的数据表字段名
+     * @param string $table 要插入的数据表名
+     * @return int
+     * @throws PDOException
+     */
+    public function selectInsert(BaseQuery $query, array $fields, string $table)
     {
+        $query->parseOptions();
 
+        $sql = $this->builder->selectInsert($query, $fields, $table);
+
+        return $this->pdoExecute($query, $sql, $query->getBind());
     }
 
+    /**
+     * Note: 更新记录
+     * Date: 2023-04-03
+     * Time: 12:00
+     * @param BaseQuery $query 查询对象
+     * @return int
+     * @throws PDOException
+     */
     public function update(BaseQuery $query)
     {
+        $query->parseOptions();
 
+        $sql = $this->builder->update($query);
+
+        $result = $sql == '' ? 0 : $this->pdoExecute($query, $sql, $query->getBind());
+
+        if ($result) {
+            $this->db->trigger('after_update', $query);
+        }
+
+        return $result;
     }
 
+    /**
+     * Note: 删除记录
+     * Date: 2023-04-03
+     * Time: 14:24
+     * @param BaseQuery $query 查询对象
+     * @return int
+     * @throws DbException
+     */
     public function delete(BaseQuery $query)
     {
+        $query->parseOptions();
 
+        $sql = $this->builder->delete($query);
+
+        $result = $this->pdoExecute($query, $sql, $query->getBind());
+
+        if ($result) {
+            $this->db->trigger('after_delete', $query);
+        }
+
+        return $result;
     }
 
-    public function value(BaseQuery $query)
+    /**
+     * Note: 聚合方法调用
+     * Date: 2023-04-07
+     * Time: 10:12
+     * @param BaseQuery $query 查询对象
+     * @param string $aggregate 聚合方法
+     * @param mixed $field 字段名
+     * @param bool $force 强制转换数字类型
+     * @return mixed
+     */
+    public function aggregate(BaseQuery $query, string $aggregate, $field, bool $force = false)
     {
+        if (is_string($field) && stripos($field, 'DISTINCT ') === 0) {
+            [$distinct, $field] = explode(' ', $field);
+        }
 
+        $field = $aggregate . '(' . (!empty($distinct) ? 'DISTINCT ' : '') . $this->builder->parseKey($query, $field, true) . ') as ' . strtolower($aggregate);
+        $result = $this->value($query, $field, 0);
+
+        return $force ? (float)$result : $result;
     }
 
-    public function aggregate(BaseQuery $query)
+    /**
+     * Note: 得到某个字段的值
+     * Date: 2023-04-03
+     * Time: 15:41
+     * @param BaseQuery $query 查询对象
+     * @param string $field 字段
+     * @param mixed $default 默认值
+     * @param bool $one 返回一个值
+     * @return mixed|null
+     * @throws DbException
+     */
+    public function value(BaseQuery $query, string $field, $default = null, bool $one = true)
     {
+        $options = $query->parseOptions();
 
+        if (isset($options['field'])) {
+            $query->removeOption('field');
+        }
+
+        if (isset($options['group'])) {
+            $query->group('');
+        }
+
+        $query->setOption('field', (array)$field);
+
+        if (!empty($options['cache'])) {
+            $cacheItem = $this->parseCache($query, $options['cache'], 'value');
+            $key = $cacheItem->getKey();
+
+            if ($this->cache->has($key)) {
+                return $this->cache->get($key);
+            }
+        }
+
+        $sql = $this->builder->select($query, $one);
+
+        if (isset($options['field'])) {
+            $query->setOption('field', $options['field']);
+        } else {
+            $query->removeOption('field');
+        }
+
+        if (isset($options['group'])) {
+            $query->setOption('group', $options['group']);
+        }
+
+        $pdo = $this->getPDOStatement($sql, $query->getBind(), $options['master']);
+
+        $result = $pdo->fetchColumn();
+
+        if (isset($cacheItem)) {
+            $cacheItem->set($result);
+            $this->cacheData($cacheItem);
+        }
+
+        return $result !== false ? $result : $default;
     }
 
-    public function column(BaseQuery $query)
+    /**
+     * Note: 得到某个列的数组
+     * Date: 2023-04-03
+     * Time: 16:14
+     * @param BaseQuery $query 查询对象
+     * @param array|string $column 字段名
+     * @param string $key 索引
+     * @return array
+     */
+    public function column(BaseQuery $query, $column, string $key = '')
     {
+        $options = $query->parseOptions();
+        if (isset($options['field'])) {
+            $this->removeOption('field');
+        }
 
+        if (empty($key) || trim($key) == '') {
+            $key = null;
+        }
+
+        if (is_string($column)) {
+            $column = trim($column);
+            if ($column !== '*') {
+                $column = array_map('trim', explode(',', $column));
+            }
+        } elseif (is_array($column)) {
+            if (in_array('*', $column)) {
+                $column = '*';
+            }
+        } else {
+            throw new DbException('no support type');
+        }
+
+        $field = $column;
+        if ($column !== '*' && $key && !in_array($key, $column)) {
+            $field[] = $key;
+        }
+
+        $query->setOption('field', $field);
+
+        if (!empty($options['cache'])) {
+            $cacheItem = $this->parseCache($query, $options['cache'], 'column');
+            $name = $cacheItem->getKey();
+
+            if ($this->cache->has($name)) {
+                return $this->cache->get($name);
+            }
+        }
+
+        $sql = $this->builder->select($query);
+
+        if (isset($options['field'])) {
+            $query->setOption('field', $options['field']);
+        } else {
+            $query->removeOption('field');
+        }
+
+        $pdo = $this->getPDOStatement($sql, $query->getBind(), $options['master']);
+        $resultSet = $pdo->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($resultSet)) {
+            $result = [];
+        } elseif ($column !== '*' && count($column) === 1) {
+            $column = array_shift($column);
+            $result = array_column($resultSet, trim($column), $key);
+        } elseif ($key) {
+            $result = array_column($resultSet, null, $key);
+        } else {
+            $result = $resultSet;
+        }
+
+        if (isset($cacheItem)) {
+            $cacheItem->set($result);
+            $this->cacheData($cacheItem);
+        }
+
+        return $result;
     }
 
+    /**
+     * Note: 批量处理SQL语句
+     * Date: 2023-04-03
+     * Time: 16:10
+     * @param BaseQuery $query 查询对象
+     * @param array $sqlArray SQL批处理指令
+     * @param array $bind 参数绑定
+     * @return bool
+     * @throws \Exception
+     */
+    public function batchQuery(BaseQuery $query, array $sqlArray = [], array $bind = [])
+    {
+        $this->startTrans();
+
+        try {
+            foreach ($sqlArray as $sql) {
+                $this->pdoExecute($query, $sql, $bind);
+            }
+            $this->commit();
+        } catch (\Exception $e) {
+            $this->rollback();
+            throw $e;
+        }
+
+        return true;
+    }
+
+    /**
+     * Note: 执行数据库事务
+     * Date: 2023-04-03
+     * Time: 15:57
+     * @param callable $callback 回调方法
+     * @return mixed|void
+     * @throws \Exception
+     * @throws \Throwable
+     */
     public function transaction(callable $callback)
     {
+        $this->startTrans();
+        try {
+            $result = null;
+            if (is_callable($callback)) {
+                $result = $callback($this);
+            }
 
+            $this->commit();
+            return $result;
+        } catch (\Exception | \Throwable) {
+            $this->rollback();
+            throw $e;
+        }
     }
 
     /**
@@ -1398,29 +1640,48 @@ class PDOConnection extends Connection
         return 'ROLLBACK TO SAVEPOINT ' . $name;
     }
 
-    public function startTransXa()
+    /**
+     * Note: 启动XA事务
+     * Date: 2023-04-06
+     * Time: 14:56
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function startTransXa(string $xid)
     {
-
     }
 
-    public function prepareXa()
+    /**
+     * Note: 预编译XA事务
+     * Date: 2023-04-06
+     * Time: 14:58
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function prepareXa(string $xid)
     {
-
     }
 
-    public function commitXa()
+    /**
+     * Note: 提交XA事务
+     * Date: 2023-04-06
+     * Time: 14:59
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function commitXa(string $xid)
     {
-
     }
 
-    public function rollbackXa()
+    /**
+     * Note: 回滚XA事务
+     * Date: 2023-04-06
+     * Time: 14:59
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function rollbackXa(string $xid)
     {
-
-    }
-
-    public function batchQuery()
-    {
-
     }
 
     /**
@@ -1469,8 +1730,25 @@ class PDOConnection extends Connection
         return $insertId;
     }
 
+    /**
+     * Note: 获取最近的错误消息
+     * Date: 2023-04-03
+     * Time: 15:51
+     * @return string
+     */
     public function getError()
     {
+        if ($this->PDOStatement) {
+            $error = $this->PDOStatement->errorInfo();
+            $error = $error[1] . ':' . $error[2];
+        } else {
+            $error = '';
+        }
 
+        if ($this->queryStr != '') {
+            $error .= "\n [SQL语句]: " . $this->getRealSql();
+        }
+
+        return $error;
     }
 }

@@ -25,6 +25,18 @@ abstract class Builder
      */
     protected $insertSql = '%INSERT%%EXTRA% INTO %TABLE% (%FIELD%) VALUES (%DATA%) %COMMENT%';
 
+    /**
+     * update SQL表达式
+     * @var string
+     */
+    protected $updateSql = 'UPDATE%EXTRA% %TABLE% SET %SET%%JOIN%%WHERE%%ORDER%%LIMIT% %LOCK%%COMMENT%';
+
+    /**
+     * delete SQL表达式
+     * @var string
+     */
+    protected $deleteSql = 'DELETE%EXTRA% FROM %TABLE%%USING%%JOIN%%WHERE%%ORDER%%LIMIT% %LOCK%%COMMENT%';
+
     public function __construct(ConnectionInterface $connection)
     {
         $this->connection = $connection;
@@ -221,7 +233,7 @@ abstract class Builder
                 $this->parseTable($query, $options['table']),
                 $this->parseDistinct($query, $options['distinct']),
                 $this->parseExtra($query, $options['extra']),
-                $this->parseField($query, $options['field']),
+                $this->parseField($query, $options['field'] ?? '*'),
                 $this->parseForce($query, $options['force']),
                 $this->parseJoin($query, $options['join']),
                 $this->parseWhere($query, $options['where']),
@@ -267,6 +279,91 @@ abstract class Builder
                 $this->parseComment($query, $option['comment']),
             ],
             $this->insertSql
+        );
+    }
+
+    /**
+     * Note: 生成inert select 语句
+     * Date: 2023-04-03
+     * Time: 11:52
+     * @param Query $query 查询对象
+     * @param array $fields 数据
+     * @param string $table 数据表
+     * @return string
+     */
+    public function selectInsert(Query $query, array $fields, string $table)
+    {
+        foreach ($fields as &$field) {
+            $field = $this->parseKey($query, $field, true);
+        }
+
+        return 'INSERT INTO ' . $this->parseTable($query, $table) . ' (' . implode(',', $fields) . ') ' . $this->select($query);
+    }
+
+    /**
+     * Note: 生成update SQL
+     * Date: 2023-04-03
+     * Time: 12:04
+     * @param Query $query 查询对象
+     * @return string
+     */
+    public function update(Query $query)
+    {
+        $options = $this->getOptions();
+
+        $data = $this->parseData($query, $options['data']);
+
+        if (empty($data)) {
+            return '';
+        }
+
+        $set = [];
+        foreach ($data as $key => $val) {
+            $set[] = $key . ' = ' . $val;
+        }
+
+        return str_replace(
+            ['%TABLE%', '%EXTRA%', '%SET%', '%JOIN%', '%WHERE%', '%ORDER%', '%LIMIT%', '%LOCK%', '%COMMENT%'],
+            [
+                $this->parseTable($query, $options['table']),
+                $this->parseExtra($query, $options['extra']),
+                implode(' , ', $set),
+                $this->parseJoin($query, $options['join']),
+                $this->parseWhere($query, $options['where']),
+                $this->parseOrder($query, $options['order']),
+                $this->parseLimit($query, $options['limit']),
+                $this->parseLock($query, $options['lock']),
+                $this->parseComment($query, $options['comment']),
+            ],
+            $this->updateSql
+        );
+    }
+
+    /**
+     * Note: 生成delete SQL
+     * Date: 2023-04-03
+     * Time: 15:05
+     * @param Query $query 查询对象
+     * @return string
+     */
+    public function delete(Query $query)
+    {
+        $options = $this->getOptions();
+
+        return str_replace(
+            ['%TABLE%', '%EXTRA%', '%USING%', '%JOIN%', '%WHERE%', '%ORDER%', '%LIMIT%', '%LOCK%', '%COMMENT%'],
+            [
+                $this->parseTable($query, $options['table']),
+                $this->parseExtra($query, $options['extra']),
+                !empty($options['using']) ? ' USING ' . $this->parseTable($query, $options['using']) . ' ' : '',
+                $this->parseJoin($query, $options['join']),
+                $this->parseWhere($query, $options['where']),
+                $this->parseOrder($query, $options['order']),
+                $this->parseLimit($query, $options['limit']),
+                $this->parseLock($query, $options['lock']),
+                $this->parseComment($query, $options['comment']),
+            ],
+            $this->deleteSql
         );
     }
 }

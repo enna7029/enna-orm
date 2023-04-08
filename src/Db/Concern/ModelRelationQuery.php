@@ -5,6 +5,11 @@ namespace Enna\Orm\Db\Concern;
 
 use Enna\Orm\Model;
 
+/**
+ * 模型及关联查询
+ * Trait ModelRelationQuery
+ * @package Enna\Orm\Db\Concern
+ */
 trait ModelRelationQuery
 {
     /**

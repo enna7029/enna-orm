@@ -57,7 +57,7 @@ class Fetch
      * @param string $sql
      * @return string
      */
-    public function fetch(string $sql)
+    public function     fetch(string $sql)
     {
         $bind = $this->query->getBind();
 

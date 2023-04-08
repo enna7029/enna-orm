@@ -72,4 +72,91 @@ class Mysql extends PDOConnection
 
         return $this->fieldCase($info);
     }
+
+    /**
+     * Note: 取得数据库的表信息
+     * Date: 2023-04-06
+     * Time: 14:55
+     * @param string $dbName 数据表
+     * @return array
+     * @throws \Enna\Orm\Db\Exception\DbException
+     */
+    public function getTables(string $dbName = '')
+    {
+        $sql = !empty($dbName) ? 'SHOW TABLES FROM ' . $dbName : 'SHOW TABLES';
+        $pdo = $this->getPDOStatement($sql);
+        $result = $pdo->fetchAll(PDO::FETCH_ASSOC);
+
+        $info = [];
+        foreach ($result as $key => $val) {
+            $info[$key] = $val;
+        }
+
+        return $info;
+    }
+
+    /**
+     * Note: 是否支持事务嵌套
+     * Date: 2023-04-06
+     * Time: 14:33
+     * @return bool
+     */
+    protected function supportSavepoint()
+    {
+        return true;
+    }
+
+    /**
+     * Note: 启动XA事务
+     * Date: 2023-04-06
+     * Time: 15:00
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function startTransXa(string $xid)
+    {
+        $this->initConnect(true);
+        $this->linkID->exec("XA START '$xid'");
+    }
+
+    /**
+     * Note: 预编译XA事务
+     * Date: 2023-04-07
+     * Time: 9:57
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function prepareXa(string $xid)
+    {
+        $this->initConnect(true);
+        $this->linkID->exec("XA END '$xid'");
+        $this->linkID->exec("XA PREPARE '$xid'");
+    }
+
+    /**
+     * Note: 提交XA事务
+     * Date: 2023-04-07
+     * Time: 10:06
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function commitXa(string $xid)
+    {
+        $this->initConnect(true);
+        $this->linkID->exec("XA COMMIT '$xid'");
+    }
+
+    /**
+     * Note: 回滚XA事务
+     * Date: 2023-04-07
+     * Time: 10:07
+     * @param string $xid XA事务ID
+     * @return void
+     */
+    public function rollbackXa(string $xid)
+    {
+        $this->initConnect(true);
+        $this->linkID->exec("XA ROLLBACK '$xid'");
+    }
+
 }

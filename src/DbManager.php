@@ -129,8 +129,7 @@ class DbManager
     }
 
     /**
-     * Note:
-     * User: enna
+     * Note: 设置日志对象
      * Date: 2023-03-21
      * Time: 10:18
      * @param LoggerInterface $log 日志对象
