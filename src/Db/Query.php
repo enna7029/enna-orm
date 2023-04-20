@@ -9,6 +9,7 @@ class Query extends BaseQuery
 {
     use Concern\JoinAndViewQuery;
     use Concern\ParamsBind;
+    use Concern\TableFieldInfo;
 
     /**
      * Note: 存储过程调用
