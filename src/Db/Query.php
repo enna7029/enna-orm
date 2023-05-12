@@ -328,4 +328,130 @@ class Query extends BaseQuery
 
         return $this->autoinc;
     }
+
+    /**
+     * Note: 字段值增长
+     * Date: 2023-04-22
+     * Time: 11:27
+     * @param string $field 字段
+     * @param float|int $step 增长值
+     * @return $this
+     */
+    public function inc(string $field, float $step = 1)
+    {
+        $this->options['data'][$field] = ['INC', $step];
+
+        return $this;
+    }
+
+    /**
+     * Note: 字段值减少
+     * Date: 2023-04-22
+     * Time: 11:32
+     * @param string $field 字段值
+     * @param float|int $step 减少值
+     * @return $this
+     */
+    public function dec(string $field, float $step = 1)
+    {
+        return $this->options['data'][$field] = ['DEC', $step];
+
+        return $this;
+    }
+
+    /**
+     * Note: 获取当前的查询标识
+     * Date: 2023-04-22
+     * Time: 11:45
+     * @param mixed $data 要序列化的数据
+     * @return string
+     */
+    public function getQueryid($data = null)
+    {
+        return md5($this->getConfig('database') . serialize(var_export($data ?: $this->options, true))) . serialize($this->getBind(false));
+    }
+
+    /**
+     * Note: 执行查询但只返回PDOStatement对象
+     * Date: 2023-04-22
+     * Time: 11:49
+     * @return \PDOStatement
+     */
+    public function getPdo()
+    {
+        return $this->connection->pdo($this);
+    }
+
+    /**
+     * Note: 使用游标查询记录
+     * Date: 2023-04-22
+     * Time: 14:13
+     * @param mixed $data 数据
+     * @return \Generator
+     */
+    public function cursor($data = null)
+    {
+        if (!is_null($data)) {
+            $this->parsePkWhere($data);
+        }
+
+        $this->options['data'] = $data;
+
+        return $this->connection->cursor($this);
+    }
+
+    /**
+     * Note: 分批处理返回的数据
+     * Date: 2023-04-22
+     * Time: 14:17
+     * @param int $count 每次处理的数量
+     * @param \Closure $callback 回调方法
+     * @param string|array $column 要根据查询的字段
+     * @param string $sort 排序方法
+     * @return bool
+     */
+    public function chunk(int $count, \Closure $callback, $column = null, string $sort = 'asc')
+    {
+        $options = $this->getOptions();
+        $column = $column ?: $this->getPk();
+
+        if (isset($options['order'])) {
+            unset($options['order']);
+        }
+
+        $query = $this->options($options)->limit($count);
+
+        if (is_string($column)) {
+            if (strpos($column, '.')) {
+                [$alias, $key] = explode('.', $column);
+            } else {
+                $key = $column;
+            }
+
+            $query->order($column, $sort);
+        } else {
+            $query->order($column);
+        }
+
+        $resultSet = $query->select();
+
+        while (count($resultSet) > 0) {
+            if (call_user_func($callback, $resultSet) === false) {
+                return false;
+            }
+
+            $newQuery->options($options)->limit($count);
+
+            if (is_string($column)) {
+                $end = $resultSet->pop();
+                $lastId = $end[$key] ?? 'id';
+                $newQuery->order($column, $sort);
+            } else {
+                $newQuery->order($column);
+            }
+            $resultSet = $newQuery->where($key, strtolower($sort) == 'asc' ? '>' : '<', $lastId);
+        }
+
+        return true;
+    }
 }

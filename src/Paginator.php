@@ -104,6 +104,18 @@ abstract class Paginator implements ArrayAccess, Countable, IteratorAggregate, J
         $this->items = $items;
     }
 
+    /**
+     * Note: 执行分页驱动:通过容器启动和通过闭包设置
+     * Date: 2023-04-17
+     * Time: 11:02
+     * @param Collection $items 数据集
+     * @param int $listRows 每页数量
+     * @param int $currentPage 当前页
+     * @param int|null $total 总数
+     * @param bool $simple 是否简单分页
+     * @param array $options 参数
+     * @return Bootstrap|false|mixed
+     */
     public static function make($items, int $listRows, int $currentPage = 1, int $total = null, bool $simple = false, array $options = [])
     {
         if (isset(static::$maker)) {

@@ -71,7 +71,7 @@ trait Attribute
      * json数据取出时,是否需要转换为数组
      * @var array
      */
-    protected $jsonArray = false;
+    protected $jsonAssoc = false;
 
     /**
      * 是否严格字段大小写
@@ -90,4 +90,17 @@ trait Attribute
      * @var array
      */
     private $withAttr = [];
+
+    /**
+     * Note: 设置数据字段获取器
+     * Date: 2023-05-11
+     * Time: 17:15
+     * @param array|string $name 字段名
+     * @param callable $callback 闭包获取器
+     * @return $this
+     */
+    public function withAttribute($name, callable $callback = null)
+    {
+
+    }
 }

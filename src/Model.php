@@ -8,14 +8,14 @@ use JsonSerializable;
 use ArrayAccess;
 use Enna\Orm\Contract\Arrayable;
 use Enna\Orm\Contract\Jsonable;
-use Enna\Orm\Model\Concern\Attribute;
-use Enna\Orm\Model\Concern\ModelEvent;
 use Enna\Orm\Db\BaseQuery as Query;
 
 abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonable
 {
-    use Attribute;
-    use ModelEvent;
+    use Model\Concern\Attribute;
+    use Model\Concern\ModelEvent;
+    use Model\Concern\TimeStamp;
+    use Model\Concern\SoftDelete;
 
     /**
      * 数据是否存在
@@ -24,16 +24,28 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     private $exists = false;
 
     /**
+     * 是否强制更新数据
+     * @var bool
+     */
+    private $force = false;
+
+    /**
+     * 是否replace
+     * @var bool
+     */
+    private $replace = false;
+
+    /**
      * 更新条件
      * @var mixed
      */
     private $updateWhere;
 
     /**
-     * Db对象
-     * @var DbManager
+     * 数据库配置
+     * @var string
      */
-    protected static $db;
+    protected $connection;
 
     /**
      * 模型名称
@@ -48,16 +60,40 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     protected $table;
 
     /**
-     * 数据库配置
-     * @var string
-     */
-    protected $connection;
-
-    /**
      * 数据表后缀
      * @var string
      */
     protected $suffix;
+
+    /**
+     * 主键
+     * @var string
+     */
+    protected $key;
+
+    /**
+     * Db对象
+     * @var DbManager
+     */
+    protected static $db;
+
+    /**
+     * 容器对象的依赖注入方法
+     * @var callable
+     */
+    protected static $invoker;
+
+    /**
+     * 软删除默认字段值
+     * @var mixed
+     */
+    protected $defaultSoftDelete;
+
+    /**
+     * 全局查询范围
+     * @var array
+     */
+    protected $globalScope = [];
 
     /**
      * 服务注入(扩展服务)
@@ -172,6 +208,48 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     public static function setDb(DbManager $db)
     {
         self::$db = $db;
+    }
+
+    /**
+     * Note: 设置Event对象
+     * Date: 2023-05-11
+     * Time: 15:11
+     * @param object $event Event对象
+     * @return void
+     */
+    public static function setEvent($event)
+    {
+        self::$event = $event;
+    }
+
+    /**
+     * Note: 设置容器对象的依赖注入方法
+     * Date: 2023-05-11
+     * Time: 15:29
+     * @param callable $callable 依赖注入方法
+     * @return void
+     */
+    public static function setInvoker(callable $callable)
+    {
+        self::$invoker = $callable;
+    }
+
+    /**
+     * Note: 调用反射执行模型方法 支持参数绑定
+     * Date: 2023-05-11
+     * Time: 15:33
+     * @param mixed $method 闭包或方法
+     * @param array $vars 参数
+     * @return mixed
+     */
+    public function invoke($method, array $vars = [])
+    {
+        if (self::$invoker) {
+            $call = self::$invoker;
+            return $call($method instanceof Closure ? $method : Closure::fromCallable([$this, $method]), $vars);
+        }
+
+        return call_user_func_array($method instanceof Closure ? $method : Closure::fromCallable([$this, $method]), $vars);
     }
 
     /**
@@ -308,34 +386,45 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
 
     /**
      * Note: 获取当前模型的数据库查询对象
-     * User: enna
      * Date: 2023-03-17
      * Time: 9:20
      * @param array $scope 设置不使用的全局查询范围
      * @return Query
      */
-    public function db()
+    public function db(array $scope = [])
     {
-        //self::$db->connect();
-    }
+        $query = self::$db->connect($this->connection)
+            ->name($this->name . $this->suffix)
+            ->pk($this->pk);
 
-    /**
-     * Note: 利用回调执行依赖注入
-     * Date: 2023-03-16
-     * Time: 18:47
-     * @param $method
-     * @param array $vars
-     * @return false|mixed
-     */
-    public function invoke($method, array $vars = [])
-    {
-        return call_user_func_array($method instanceof Closure ? $method : [$this, $method], $vars);
+        if (!empty($this->table)) {
+            $query->table($this->table . $this->suffix);
+        }
+
+        $query->model($this)
+            ->json($this->json, $this->jsonAssoc)
+            ->setFieldType(array_merge($this->schema, $this->jsonType));
+
+        if (property_exists($this, 'withTrashed') && !$this->withTrashed) {
+            $this->withNoTrashed($query);
+        }
+
+        if (is_array($scope)) {
+            $globalScope = array_diff($this->globalScope, $scope);
+            $query->scope($globalScope);
+        }
+
+        return $query;
     }
 
     public function __call($method, $args)
     {
         if (isset(static::$macro[static::class][$method])) {
             return call_user_func_array(static::$macro[static::class][$method], $args);
+        }
+
+        if (strtolower($method) == 'withattr') {
+            return call_user_func_array([$this, 'withAttribute'], $args);
         }
 
         return call_user_func_array([$this->db(), $method], $args);

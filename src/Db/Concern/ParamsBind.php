@@ -31,6 +31,18 @@ trait ParamsBind
     }
 
     /**
+     * Note: 检测参数是否已经绑定
+     * Date: 2023-05-04
+     * Time: 11:34
+     * @param string $key 参数名
+     * @return bool
+     */
+    public function isBind($key)
+    {
+        return isset($this->bind[$key]);
+    }
+
+    /**
      * Note: 获取绑定的参数
      * Date: 2023-03-29
      * Time: 17:24

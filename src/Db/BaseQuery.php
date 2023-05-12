@@ -900,7 +900,7 @@ abstract class BaseQuery
     public function update(array $data)
     {
         if (!empty($data)) {
-            $data = array_merge($this->options['data'] ?? [], $data);
+            $this->options['data'] = array_merge($this->options['data'] ?? [], $data);
         }
 
         if (empty($this->options['where'])) {
