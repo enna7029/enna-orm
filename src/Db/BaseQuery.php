@@ -409,6 +409,20 @@ abstract class BaseQuery
     }
 
     /**
+     * Note: 设置当前字段添加的表别名
+     * Date: 2023-05-23
+     * Time: 11:08
+     * @param string $via 表别名
+     * @return $this
+     */
+    public function via(string $via = '')
+    {
+        $this->options['via'] = $via;
+
+        return $this;
+    }
+
+    /**
      * Note: 指定数据库主键
      * Date: 2023-04-18
      * Time: 18:38
@@ -995,7 +1009,11 @@ abstract class BaseQuery
             $this->throwNotFound();
         }
 
-        $this->resultSet($resultSet);
+        if (!empty($this->model)) {
+            $resultSet = $this->resultSetToModelCollection($resultSet);
+        } else {
+            $this->resultSet($resultSet);
+        }
 
         return $resultSet;
     }
@@ -1023,7 +1041,11 @@ abstract class BaseQuery
             return $this->resultToEmpty();
         }
 
-        $this->result($result);
+        if (!empty($this->model)) {
+            $this->resultToModel($result, $this->options);
+        } else {
+            $this->result($result);
+        }
 
         return $result;
     }
@@ -1176,6 +1198,18 @@ abstract class BaseQuery
                 }
             }
         }
+    }
+
+    /**
+     * Note: 获取模型的更新条件
+     * Date: 2023-05-26
+     * Time: 16:44
+     * @param array $options 查询参数
+     * @return mixed
+     */
+    protected function getModelUpdateCondition(array $options)
+    {
+        return $options['where']['AND'] ?? null;
     }
 
     public function __call(string $method, array $args)

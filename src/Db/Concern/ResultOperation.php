@@ -174,9 +174,10 @@ trait ResultOperation
      * @param array $result 数据
      * @param array $json JSON字段
      * @param bool $assoc 是否转换为数组
+     * @param array $withRelationAttr 关联获取器
      * @return void
      */
-    protected function jsonResult(array &$result, array $json = [], bool $assoc = false)
+    protected function jsonResult(array &$result, array $json = [], bool $assoc = false, array $withRelationAttr = [])
     {
         foreach ($json as $name) {
             if (!isset($result[$name])) {
@@ -184,6 +185,12 @@ trait ResultOperation
             }
 
             $result[$name] = json_decode($result[$name], true);
+
+            if (isset($withRelationAttr[$name])) {
+                foreach ($withRelationAttr[$name] as $key => $closure) {
+                    $result[$name][$key] = $closure($result[$name][$key] ?? null, $result[$name]);
+                }
+            }
 
             if (!$assoc) {
                 $result[$name] = (object)$result[$name];

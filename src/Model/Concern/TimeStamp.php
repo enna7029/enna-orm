@@ -79,6 +79,20 @@ trait TimeStamp
     }
 
     /**
+     * Note: 设置时间格式化
+     * Date: 2023-05-11
+     * Time: 18:03
+     * @param string|false $format 时间格式
+     * @return $this
+     */
+    public function setDateFormat($format)
+    {
+        $this->dateFormat = $format;
+
+        return $this;
+    }
+
+    /**
      * Note: 获取自动写入时间字段类型
      * Date: 2023-05-11
      * Time: 18:01
@@ -87,20 +101,6 @@ trait TimeStamp
     public function getDateFormat()
     {
         return $this->dateFormat;
-    }
-
-    /**
-     * Note: 设置时间格式化
-     * Date: 2023-05-11
-     * Time: 18:03
-     * @param string|false $format 时间格式
-     * @return $this
-     */
-    public function setDataFormat($format)
-    {
-        $this->dateFormat = $format;
-
-        return $this;
     }
 
     /**
@@ -117,5 +117,99 @@ trait TimeStamp
         $this->updateTime = $updateTime;
 
         return $this;
+    }
+
+    /**
+     * Note: 时间日期字段格式化
+     * Date: 2023-05-15
+     * Time: 18:26
+     * @param mixed $format 格式化
+     * @param mixed $time 日期表达式
+     * @param bool $timestamp 日期表达式是否为时间戳
+     * @return mixed
+     */
+    protected function formatDateTime($format, $time = 'now', bool $timestamp = false)
+    {
+        if (empty($time)) {
+            return;
+        }
+
+        if ($format == false) {
+            return $time;
+        } elseif (strpos($time, '\\') !== false) {
+            return new $format($time);
+        }
+
+        if ($time instanceof DateTime) {
+            $dateTime = $time;
+        } elseif ($timestamp) {
+            $dateTime = new DateTime();
+            $dateTime->setTimestamp((int)$time);
+        } else {
+            $dateTime = new DateTime($time);
+        }
+
+        return $dateTime->format($format);
+    }
+
+    /**
+     * Note: 获取时间字段值
+     * Date: 2023-05-16
+     * Time: 16:45
+     * @param mixed $value 值
+     * @return mixed
+     */
+    protected function getTimestampValue($value)
+    {
+        $type = $this->checkTimeFieldType($value);
+
+        if (is_string($type) && in_array(strtolower($type), ['datetime', 'date', 'timestamp'])) {
+            $value = $this->formatDateTime($this->dateFormat, $value);
+        } else {
+            $value = $this->formatDateTime($this->dateFormat, $value, true);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Note: 自动写入时间戳
+     * Date: 2023-05-16
+     * Time: 17:38
+     * @return mixed
+     */
+    public function autoWriteTimestamp()
+    {
+        $type = $this->checkTimeFieldType($this->autoWriteTimestamp);
+
+        return is_string($type) ? $this->getTimeTypeValue($type) : time();
+    }
+
+    /**
+     * Note: 获取指定类型的时间字段值
+     * Date: 2023-05-16
+     * Time: 17:40
+     * @param string $type
+     */
+    public function getTimeTypeValue(string $type)
+    {
+        $value = time();
+
+        switch ($type) {
+            case 'datetime':
+            case 'date':
+            case 'timestamp':
+                $value = $this->formatDateTime('Y-m-d H:i:s');
+                break;
+            default:
+                if (strpos($type, '\\') !== false) {
+                    $obj = new $type();
+                    if (method_exists($obj, '__toString')) {
+                        $value = $obj->__toString();
+                    }
+                }
+        }
+
+        return $value;
     }
 }

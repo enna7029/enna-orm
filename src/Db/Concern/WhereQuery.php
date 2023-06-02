@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Enna\Orm\Db\Concern;
 
 use Closure;
+use Enna\Orm\Db\BaseQuery;
 use Enna\Orm\Db\Raw;
 use Predis\Command\Redis\MIGRATE;
 use Predis\Command\Redis\WATCH;
@@ -26,10 +27,31 @@ trait WhereQuery
      */
     public function where($field, $op = null, $condition = null)
     {
+        if ($field instanceof $this) {
+            $this->parseQueryWhere($field);
+            return $this;
+        } elseif ($field === true || $field === 1) {
+            $this->options['where']['and'][] = true;
+            return $this;
+        }
+
         $param = func_get_args();
         array_shift($param);
 
         return $this->parseWhereExp('AND', $field, $op, $condition, $param);
+    }
+
+    /**
+     * Note: 解析Query对象查询条件
+     * Date: 2023-05-23
+     * Time: 10:53
+     * @param BaseQuery $query 查询对象
+     * @return void
+     */
+    protected function parseQueryWhere(BaseQuery $query)
+    {
+        $this->options['where'] = $query->getOptions('where');
+        
     }
 
     /**
