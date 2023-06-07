@@ -1,4 +1,5 @@
 <?php
+declare (strict_types=1);
 
 namespace Enna\Orm\Model;
 
@@ -74,6 +75,72 @@ abstract class Relation
     protected $withoutField;
 
     /**
+     * Note: 获取关联的所属模型
+     * Date: 2023-06-07
+     * Time: 18:04
+     * @return Model
+     */
+    public function getParent()
+    {
+        return $this->parent;
+    }
+
+    /**
+     * Note: 获取当前的关联模型类的Query实例
+     * Date: 2023-06-07
+     * Time: 18:06
+     * @return Query
+     */
+    public function getQuery()
+    {
+        return $this->query;
+    }
+
+    /**
+     * Note: 获取关联表外键
+     * Date: 2023-06-07
+     * Time: 18:07
+     * @return string
+     */
+    public function getForeignKey()
+    {
+        return $this->foreignKey;
+    }
+
+    /**
+     * Note: 获取关联表主键
+     * Date: 2023-06-07
+     * Time: 18:08
+     * @return string
+     */
+    public function getLocalKey()
+    {
+        return $this->localKey;
+    }
+
+    /**
+     * Note: 获取当前的关联模型类的实例
+     * Date: 2023-06-07
+     * Time: 18:09
+     * @return Model
+     */
+    public function getModel()
+    {
+        return $this->query->getModel();
+    }
+
+    /**
+     * Note: 当前关联是否为自关联
+     * Date: 2023-06-07
+     * Time: 18:10
+     * @return bool
+     */
+    public function isSelfRelation()
+    {
+        return $this->selfRelation;
+    }
+
+    /**
      * Note: 限制关联模型的数量
      * Date: 2023-05-24
      * Time: 17:48
@@ -133,8 +200,23 @@ abstract class Relation
             if (is_string($key)) {
                 $where[] = [strpos($key, '.') === false ? $relation . '.' . $key : $key, '=', $val];
                 unset($where[$key]);
+            } elseif (isset($val[0]) && false === strpos($val[0], '.')) {
+                $val[0] = $relation . '.' . $val[0];
             }
         }
+    }
+
+    /**
+     * Note: 封装关联数据集
+     * Date: 2023-06-07
+     * Time: 14:49
+     * @param array $resultSet 数据集合
+     * @param Model $parent 父模型
+     * @return mixed
+     */
+    protected function resultSetBuild(array $resultSet, Model $parent)
+    {
+        return (new $this->model)->toCollection($resultSet)->setParent($parent);
     }
 
     /**
@@ -162,6 +244,56 @@ abstract class Relation
         }
 
         return $fields;
+    }
+
+    /**
+     * Note: 获取闭包的参数类型
+     * Date: 2023-05-26
+     * Time: 11:31
+     * @param Closure $closure 闭包
+     * @return mixed
+     */
+    protected function getClosureType(Closure $closure)
+    {
+        $reflect = new ReflectionFunction($closure);
+        $params = $reflect->getParameters();
+
+        if (!empty($params)) {
+            $type = $params[0]->getType();
+
+            if (is_null($type) || $type->getName() == Relation::class) {
+                return $this;
+            } else {
+                return $this->query;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Note: 更新记录
+     * Date: 2023-06-07
+     * Time: 17:55
+     * @param array $data 更新数据
+     * @return int
+     */
+    public function update(array $data = [])
+    {
+        return $this->query->update($data);
+    }
+
+    /**
+     * Note: 删除记录
+     * Date: 2023-06-07
+     * Time: 17:52
+     * @param mixed $data 表达式true:强制删除
+     * @return int
+     * @throws DbException
+     */
+    public function delete($data = null)
+    {
+        return $this->query->delete($data);
     }
 
     /**

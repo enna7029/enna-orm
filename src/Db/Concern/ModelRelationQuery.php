@@ -236,7 +236,7 @@ trait ModelRelationQuery
                 $relation = strstr($relation, '.', true);
             }
 
-            $result = $this->model->eagerly($this, $relation, $field, $joinType, $closure, $first);
+            $result = $this->model->withJoin($this, $relation, $field, $joinType, $closure, $first);
 
             if (!$result) {
                 unset($with[$key]);
@@ -272,7 +272,7 @@ trait ModelRelationQuery
         }
 
         if ($relation === true || is_numeric($relation)) {
-            $this->options['with_count'] = $relation;
+            $this->options['with_cache'] = $relation;
             return $this;
         }
 
@@ -444,7 +444,17 @@ trait ModelRelationQuery
             $this->resultToModel($result, $this->options, true, $withRelationAttr);
         }
 
+        //预载入查询
+        if (!empty($this->options['with'])) {
+            $result->withQuerySet($resultSet, $this->options['with'], $withRelationAttr, false, $this->options['with_cache'] ?? false);
+        }
 
+        //join预载入查询
+        if (!empty($this->options['with_join'])) {
+            $result->withQuerySet($resultSet, $option['with_join'], $withRelationAttr, true, $this->options['with_cache'] ?? false);
+        }
+
+        return $this->model->toCollection($resultSet);
     }
 
     /**
@@ -476,6 +486,7 @@ trait ModelRelationQuery
             $this->jsonResult($result, $options['json'], $options['json_assoc'], $withRelationAttr);
         }
 
+        //将结果实例化为Model
         $result = $this->model->newInstance($result, $resultSet ? null : $this->getModelUpdateCondition($options));
 
         //动态获取器
@@ -483,7 +494,7 @@ trait ModelRelationQuery
             $result->withAttribute($options['with_attr']);
         }
 
-        //输出属性
+        //输出属性控制
         if (!empty($options['visible'])) {
             $result->visible($options['visible']);
         }
@@ -501,12 +512,12 @@ trait ModelRelationQuery
 
         //预载入关联查询
         if (!$resultSet && !empty($options['with'])) {
-            $result->eagerlyResult($result, $options['with'], $withRelationAttr, false, $options['with_cache'] ?? false);
+            $result->withQuery($result, $options['with'], $withRelationAttr, false, $options['with_cache'] ?? false);
         }
 
         //join预载入查询
         if (!$resultSet && !empty($options['with_join'])) {
-            $result->eagerlyResult($result, $options['with_join'], $withRelationAttr, true, $options['with_cache'] ?? false);
+            $result->withQuery($result, $options['with_join'], $withRelationAttr, true, $options['with_cache'] ?? false);
         }
 
         //关联统计

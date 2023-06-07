@@ -51,7 +51,7 @@ trait WhereQuery
     protected function parseQueryWhere(BaseQuery $query)
     {
         $this->options['where'] = $query->getOptions('where');
-        
+
     }
 
     /**
@@ -374,6 +374,8 @@ trait WhereQuery
                 }
             }
         }
+
+        return $this;
     }
 
     /**

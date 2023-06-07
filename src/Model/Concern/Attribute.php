@@ -3,6 +3,8 @@ declare(strict_types1=1);
 
 namespace Enna\Orm\Model\Concern;
 
+use Enna\Framework\Request;
+use Enna\Orm\Model\Relation;
 use InvalidArgumentException;
 use Enna\Framework\Helper\Str;
 use DateTime;
@@ -388,7 +390,9 @@ trait Attribute
      */
     protected function getRelationValue(string $relation)
     {
-        return null;
+        $modelRelation = $this->$relation();
+
+        return $modelRelation instanceof Relation ? $this->getRelationData($modelRelation) : null;
     }
 
     /**

@@ -6,6 +6,7 @@ namespace Enna\Orm\Model\Concern;
 use Enna\Framework\Helper\Str;
 use Enna\Orm\Db\BaseQuery as Query;
 use Enna\Orm\Model;
+use Enna\Orm\Model\Relation;
 use Enna\Orm\Model\Relation\HasOne;
 use Enna\Orm\Model\Relation\HasMany;
 use Closure;
@@ -84,6 +85,28 @@ trait RelationShip
             $relation = Str::camel($name);
             return $this->getRelationValue($relation);
         }
+    }
+
+    /**
+     * Note: 设置当前模型的关联模型数据
+     * Date: 2023-06-07
+     * Time: 14:40
+     * @param string $name 关联方法名(属性名)
+     * @param mixed $value 模型数据(属性值)
+     * @param array $data 数据
+     * @return $this
+     */
+    public function setRelation(string $name, $value, array $data = [])
+    {
+        $method = 'set' . Str::studly($name) . 'Attr';
+
+        if (method_exists($this, $method)) {
+            $value = $this->$method($value, array_merge($this->data, $data));
+        }
+
+        $this->relation[$name] = $value;
+
+        return $this;
     }
 
     /**
@@ -242,20 +265,79 @@ trait RelationShip
      * @param bool $first 是否第一次关联
      * @return bool
      */
-    public function eagerly(Query $query, string $relation, $field, string $joinType = '', Closure $closure = null, bool $first = false)
+    public function withJoin(Query $query, string $relation, $field, string $joinType = '', Closure $closure = null, bool $first = false)
     {
         $relation = Str::camel($relation);
         $class = $this->$relation();
 
         if ($class instanceof OneToOne) {
-            $class->eagerly($query, $relation, $field, $joinType, $closure, $first);
+            $class->withJoin($query, $relation, $field, $joinType, $closure, $first);
             return true;
         } else {
             return false;
         }
     }
 
-    public function eagerlyResult(Model $result, array $relations, array $withRelationAttr = [], bool $join = false, bool $cache = false)
+    /**
+     * Note: 预载入关联查询:返回模型对象
+     * Date: 2023-06-02
+     * Time: 18:38
+     * @param array $resultSet 模型对象
+     * @param array $relations 关联
+     * @param array $withRelationAttr 关联获取器
+     * @param bool $join 是否JOIN方式
+     * @param false $cache 关联缓存
+     * @return void
+     */
+    public function withQuerySet(array &$resultSet, array $relations, array $withRelationAttr = [], bool $join = false, $cache = false)
+    {
+        foreach ($relations as $key => $relation) {
+            $subRelation = [];
+            $closure = null;
+
+            if ($relation instanceof Closure) {
+                $closure = $relation;
+                $relation = $key;
+            }
+
+            if (is_array($relation)) {
+                $subRelation = $resultSet;
+                $relation = $key;
+            } elseif (strpos($relation, '.')) {
+                [$relation, $subRelation] = explode('.', $relation, 2);
+
+                $subRelation = [$subRelation];
+            }
+
+            $method = Str::camel($relation);
+            $resultResult = $this->$method();
+
+            if (isset($withRelationAttr[$relation])) {
+                $resultResult->withAttr($withRelationAttr[$relation]);
+            }
+
+            if (is_scalar($cache)) {
+                $relationCache = [$cache];
+            } else {
+                $relationCache = $cache[$relation] ?? [];
+            }
+
+            $relationResult->withQuerySet($resultSet, $relation, $subRelation, $closure, $relationCache, $join);
+        }
+    }
+
+    /**
+     * Note: 预载入关联查询:返回模型对象
+     * Date: 2023-06-02
+     * Time: 18:02
+     * @param Model $result 模型对象
+     * @param array $relations 关联
+     * @param array $withRelationAttr 关联获取器
+     * @param bool $join 是否JOIN方式
+     * @param bool $cache 关联缓存
+     * @return void
+     */
+    public function withQuery(Model $result, array $relations, array $withRelationAttr = [], bool $join = false, bool $cache = false)
     {
         foreach ($relations as $relation) {
             $subRelation = [];
@@ -282,16 +364,14 @@ trait RelationShip
                 $resultResult->withAttr($withRelationAttr[$relation]);
             }
 
-            //...
-            if(is_scalar($cache)){
-                
+            if (is_scalar($cache)) {
+                $relationCache = [$cache];
+            } else {
+                $relationCache = $cache[$relation] ?? [];
             }
+
+            $resultResult->withQuery($result, $relation, $subRelation, $closure, $relationCache, $join);
         }
-    }
-
-    public function eagerlyResultSet()
-    {
-
     }
 
     /**
@@ -441,5 +521,21 @@ trait RelationShip
         }
 
         return Str::snake($name) . '_id';
+    }
+
+    /**
+     * Note: 获取关联模型数据
+     * Date: 2023-06-07
+     * Time: 10:54
+     * @param Relation $modelRelation 关联模型对象
+     * @return mixed
+     */
+    protected function getRelationData(Relation $modelRelation)
+    {
+        if ($this->parent && !$modelRelation->isSelfRelation() && get_class($this->parent) == get_class($modelRelation->getModel())) {
+            return $this->parent;
+        }
+
+        return $modelRelation->getRealtion();
     }
 }

@@ -9,6 +9,7 @@ use Enna\Framework\Helper\Collection;
 use Enna\Orm\Contract\ConnectionInterface;
 use Enna\Orm\Db\Exception\DbException;
 use Enna\Framework\Helper\Str;
+use Enna\Orm\Model;
 use Enna\Orm\Paginator;
 use Predis\Command\Redis\MIGRATE;
 
@@ -876,7 +877,7 @@ abstract class BaseQuery
      * Time: 16:18
      * @param array|bool $data 数据
      * @return int
-     * @throws Exception
+     * @throws DbException
      */
     public function delete($data = null)
     {
@@ -885,7 +886,7 @@ abstract class BaseQuery
         }
 
         if ($data !== true && empty($this->options['where'])) {
-            throw new Exception('no delete condition');
+            throw new DbException('no delete condition');
         }
 
         if (!empty($this->options['soft_delete'])) {
@@ -1023,7 +1024,7 @@ abstract class BaseQuery
      * Date: 2023-04-20
      * Time: 11:50
      * @param mixed $data 数据
-     * @return arary
+     * @return arary|Model|static
      */
     public function find($data = null)
     {

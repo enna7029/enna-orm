@@ -6,6 +6,11 @@ namespace Enna\Orm\Model;
 use Enna\Framework\Helper\Collection as BaseCollection;
 use Enna\Orm\Model;
 
+/**
+ * 模型数据集合类
+ * Class Collection
+ * @package Enna\Orm\Model
+ */
 class Collection extends BaseCollection
 {
     /**
@@ -134,7 +139,7 @@ class Collection extends BaseCollection
     public function setParent(Model $parent)
     {
         $this->each(function (Model $model) use ($parent) {
-
+            $model->setParent($parent);
         });
 
         return $this;

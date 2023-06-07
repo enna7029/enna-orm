@@ -7,6 +7,11 @@ use Enna\Orm\Db\BaseQuery as Query;
 use Enna\Orm\Model;
 use Closure;
 
+/**
+ * BelongsTo关联类
+ * Class BelongsTo
+ * @package Enna\Orm\Model\Relation
+ */
 class BelongsTo extends OneToOne
 {
     /**
@@ -29,6 +34,89 @@ class BelongsTo extends OneToOne
         if (get_class($parent) == $model) {
             $this->selfRelation = true;
         }
+    }
+
+    /**
+     * Note: 延迟获取关联数据
+     * Date: 2023-06-06
+     * Time: 18:23
+     * @param array $subRelation 子关联方法名
+     * @param Closure|null $closure 闭包查询方法
+     * @return Model
+     */
+    public function getRelation(array $subRelation = [], Closure $closure = null)
+    {
+        $foreignKey = $this->foreignKey;
+
+        if ($closure) {
+            $closure($this->getClosureType($closure));
+        }
+
+        $relationModel = $this->query
+            ->removeWhereField($this->localKey)
+            ->where($this->localKey, '=', $this->parent->$foreignKey)
+            ->relation($subRelation)
+            ->find();
+
+        if ($relationModel) {
+            if (!empty($this->bindAttr)) {
+                $this->bindAttr($this->parent, $relationModel);
+            }
+
+            $relationModel->setParent(clone $this->parent);
+        }
+
+        return $relationModel;
+    }
+
+    /**
+     * Note: 创建关联统计子查询
+     * Date: 2023-06-06
+     * Time: 18:26
+     * @param Closure|null $closure 闭包
+     * @param string $aggreate 聚合查询方法
+     * @param string $field 字段
+     * @param string|null $name 聚合字段别名
+     * @return string
+     */
+    public function getRelationAggreateQuery(Closure $closure = null, string $aggreate = 'count', string $field = '*', string &$name = null)
+    {
+        if ($closure) {
+            $closure($this->getClosureType($closure), $name);
+        }
+
+        return $this->query
+            ->whereExp($this->localKey, '=', $this->parent->getTable() . '.' . $this->foreignKey)
+            ->fetchSql()
+            ->$aggreate($field);
+    }
+
+    /**
+     * Note: 关联统计
+     * Date: 2023-06-06
+     * Time: 18:30
+     * @param Model $result 数据对象
+     * @param Closure|null $closure 闭包
+     * @param string $aggreate 聚合查询方法
+     * @param string $field 字段
+     * @param string|null $name 统计字段别名
+     * @return int
+     */
+    public function getRelationAggreate(Model $result, Closure $closure = null, string $aggreate = 'count', string $field = '*', string &$name = null)
+    {
+        $foreignKey = $this->foreignKey;
+
+        if (!isset($result->$foreignKey)) {
+            return 0;
+        }
+
+        if ($closure) {
+            $closure($this->getClosureType($closure), $name);
+        }
+
+        return $this->query
+            ->where($this->localKey, '=', $result->$foreignKey)
+            ->$aggreate($filed);
     }
 
     /**
@@ -99,6 +187,91 @@ class BelongsTo extends OneToOne
                 $query->where($relation . strstr($softDelete[0], '.'), '=' == $softDelete[1][0] ? $softDelete[1][1] : $defaultSoftDelete);
             })
             ->where($where);
+    }
+
+    /**
+     * Note: 预载入关联查询（数据集）
+     * Date: 2023-06-07
+     * Time: 10:21
+     * @param array $resultSet 数据集
+     * @param string $relation 关联方法名
+     * @param array $subRelation 子关联方法名
+     * @param Closure|null $closure 闭包
+     * @param array $cache 关联缓存
+     * @return mixed|void
+     */
+    protected function withSet(array &$resultSet, string $relation, array $subRelation = [], Closure $closure = null, array $cache = [])
+    {
+        $localKey = $this->localKey;
+        $foreigenKey = $this->foreignKey;
+
+        $range = [];
+        foreach ($resultSet as $result) {
+            if (isset($result->$foreigenKey)) {
+                $range[] = $result->$foreigenKey;
+            }
+        }
+
+        if (!empty($range)) {
+            $this->query->removeWhereField($localKey);
+
+            $data = $this->withWhere([
+                [$localKey, 'in', $range]
+            ], $localKey, $subRelation, $closure, $cache);
+
+            foreach ($resultSet as $result) {
+                if (!isset($data[$result->$foreigenKey])) {
+                    $relationModel = null;
+                } else {
+                    $relationModel = $data[$result->$foreigenKey];
+                    $relationModel = setParent(clone $result);
+                    $relationModel->exists(true);
+                }
+
+                if (!empty($this->bindAttr)) {
+                    $this->bindAttr($result, $relationModel);
+                } else {
+                    $result->setRelation($relation, $relationModel);
+                }
+            }
+        }
+    }
+
+    /**
+     * Note: 预载入关联查询(数据)
+     * Date: 2023-06-07
+     * Time: 10:21
+     * @param Model $result 模型对象
+     * @param string $relation 关联方法名
+     * @param array $subRelation 子关联方法名
+     * @param Closure|null $closure 闭包
+     * @param array $cache 关联缓存
+     * @return mixed|void
+     */
+    protected function withOne(Model $result, string $relation, array $subRelation = [], Closure $closure = null, array $cache = [])
+    {
+        $localKey = $this->localKey;
+        $foreignKey = $this->foreignKey;
+
+        $this->query->removeWhereField($localKey);
+
+        $data = $this->withWhere([
+            [$localKey, '=', $result->$foreignKey]
+        ], $localKey, $subRelation, $closure, $cache);
+
+        if (!isset($data[$result->$foreignKey])) {
+            $relationModel = null;
+        } else {
+            $relationModel = $data[$result->$foreignKey];
+            $relationModel->setParent(clone $result);
+            $relationModel->exist(true);
+        }
+
+        if (!empty($this->bindAttr)) {
+            $this->bindAttr($result, $relationModel);
+        } else {
+            $this->setRelation($relation, $relationModel);
+        }
     }
 
     /**
