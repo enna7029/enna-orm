@@ -4,6 +4,8 @@ declare(strice_types=1);
 namespace Enna\Orm;
 
 use Closure;
+use Enna\Orm\Model\Collection;
+use http\Params;
 use JsonSerializable;
 use ArrayAccess;
 use Enna\Orm\Contract\Arrayable;
@@ -17,6 +19,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     use Model\Concern\TimeStamp;
     use Model\Concern\RelationShip;
     use Model\Concern\Conversion;
+
     //use Model\Concern\SoftDelete;
 
     /**
@@ -427,7 +430,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
      * @param bool $exists
      * @return $this
      */
-    public function exist(bool $exists = true)
+    public function exists(bool $exists = true)
     {
         $this->exists = $exists;
 
@@ -440,7 +443,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
      * Time: 11:31
      * @return bool
      */
-    public function isExist()
+    public function isExists()
     {
         return $this->exists;
     }
@@ -481,9 +484,18 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
         return $this->force;
     }
 
-    public function getWhere()
+    /**
+     * Note: 新增数据是否使用replace
+     * Date: 2023-06-09
+     * Time: 17:20
+     * @param bool $replace
+     * @return $this
+     */
+    public function replace(bool $replace = true)
     {
+        $this->replace = $replace;
 
+        return $this;
     }
 
     /**
@@ -518,14 +530,401 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
         $this->updateWhere = $where;
     }
 
-    public function save(array $data = [], string $sequence = null)
+    /**
+     * Note: 刷新模型数据
+     * Date: 2023-06-09
+     * Time: 18:22
+     * @param bool $relaion 是否刷新关联数据
+     * @return $this
+     */
+    public function refresh(bool $relaion = false)
     {
+        if ($this->exists) {
+            $this->data = $this->db()->find($this->getPk())->getData();
+            $this->origin = $this->data;
+            $this->get = [];
 
+            if ($relaion) {
+                $this->relation = [];
+            }
+        }
+
+        return $this;
     }
 
+    /**
+     * Note: 保存当前模型对象
+     * Date: 2023-06-08
+     * Time: 17:39
+     * @param array $data 数据
+     * @param string|null $sequence 自增序列名
+     * @return bool
+     */
+    public function save(array $data = [], string $sequence = null)
+    {
+        $this->setAttrs($data);
+
+        if ($this->isEmpty() || $this->trigger('BeforeWrite') === false) {
+            return false;
+        }
+
+        $result = $this->exists ? $this->updateData() : $this->insertData($sequence);
+        if ($result === false) {
+            return false;
+        }
+
+        $this->trigger('AfterWrite');
+
+        $this->origin = $this->data;
+        $this->get = [];
+        $this->lazySave = false;
+
+        return true;
+    }
+
+    /**
+     * Note: 修改写入数据
+     * Date: 2023-06-08
+     * Time: 17:55
+     * @return bool
+     */
+    public function updateData()
+    {
+        if ($this->trigger('BeforeUpdate') === false) {
+            return false;
+        }
+
+        //获取数据
+        $data = $this->getChangeData();
+        if (empty($data)) {
+            if (!empty($this->relationWrite)) {
+                $this->autoRelationUpdate();
+            }
+            return true;
+        }
+
+        //自动写入时间戳
+        if ($this->autoWriteTimestamp && $this->updateTime) {
+            $data[$this->updateTime] = $this->autoWriteTimestamp();
+            $this->data[$this->updateTime] = $this->getTimestampValue($data[$this->updateTime]);
+        }
+
+        //检查允许的字段
+        $allowFields = $this->checkAllowFields();
+
+        //过滤掉子模型绑定父模型的属性
+        foreach ($this->relationWrite as $name => $val) {
+            if (!is_array($val)) {
+                continue;
+            }
+
+            foreach ($val as $key) {
+                if (isset($data[$key])) {
+                    unset($data[$key]);
+                }
+            }
+        }
+
+        //查询对象
+        $query = $this->db();
+        $query->transaction(function () use ($data, $allowFields, $query) {
+            $this->key = null;
+            $where = $this->getWhere();
+
+            $result = $query->where($where)
+                ->strict(false)
+                ->cache(true)
+                ->setOption('key', $this->key)
+                ->field($allowFields)
+                ->update($data);
+
+            if (!empty($this->relationWrite)) {
+                $this->autoRelationUpdate();
+            }
+        });
+
+        //事件
+        $this->trigger('AfterUpdate');
+
+        return true;
+    }
+
+    /**
+     * Note: 插入写入数据
+     * Date: 2023-06-08
+     * Time: 17:55
+     * @param string $sequence 自增名
+     * @return bool
+     */
+    public function insertData(string $sequence = null)
+    {
+        //事件
+        if ($this->trigger('BeforeInsert') === false) {
+            return false;
+        }
+
+        //获取数据
+        $data = $this->data;
+
+        //自动写入时间戳
+        if ($this->autoWriteTimestamp) {
+            if ($this->createTime && !isset($data[$this->createTime])) {
+                $data[$this->createTime] = $this->autoWriteTimestamp();
+                $this->data[$this->createTime] = $this->getTimestampValue($data[$this->createTime]);
+            }
+
+            if ($this->updateTime && !isset($data[$this->updateTime])) {
+                $data[$this->updateTime] = $this->autoWriteTimestamp();
+                $this->data[$this->updateTime] = $this->getTimestampValue($data[$this->updateTime]);
+            }
+        }
+
+        //检查允许字段
+        $allowFields = $this->checkAllowFields();
+
+        //查询对象
+        $query = $this->db();
+        $query->transaction(function () use ($data, $sequence, $allowFields, $query) {
+            $result = $query->strict(false)
+                ->field($allowFields)
+                ->replace($this->replace)
+                ->sequence($sequence)
+                ->insert($data);
+
+            if ($result) {
+                $pk = $this->getPk();
+
+                if (is_string($pk) && (!isset($this->data[$pk]) || $this->data[$pk] == '')) {
+                    unset($this->get[$pk]);
+                    $this->data[$pk] = $result;
+                }
+            }
+
+            if (!empty($this->relationWrite)) {
+                $this->autoRelationInsert();
+            }
+        });
+
+        $this->exists = true;
+        $this->origin = $this->data;
+
+        $this->trigger('AfterInsert');
+
+        return true;
+    }
+
+    /**
+     * Note: 检查数据是否允许写入
+     * Date: 2023-06-08
+     * Time: 18:13
+     * @return array
+     */
+    protected function checkAllowFields()
+    {
+        if (empty($this->field)) {
+            if (!empty($this->schema)) {
+                $this->field = array_keys(array_merge($this->schema, $this->jsonType));
+            } else {
+                $query = $this->db();
+                $table = $this->table ? $this->table . $this->suffix : $query->getTable();
+
+                $this->field = $query->getConnection()->getTableFields();
+            }
+
+            return $this->field;
+        }
+
+        $field = $this->field;
+
+        if ($this->autoWriteTimestamp) {
+            array_push($field, $this->createTime, $this->updateTime);
+        }
+
+        if (!empty($this->disuse)) {
+            $field = array_diff($field, $this->disuse);
+        }
+
+        return $field;
+    }
+
+    /**
+     * Note: 获取当前更新条件
+     * Date: 2023-06-08
+     * Time: 18:44
+     * @return mixed
+     */
+    public function getWhere()
+    {
+        $pk = $this->getPk();
+
+        if (is_string($pk) && isset($this->origin[$pk])) {
+            $where = [[$pk, '=', $this->origin[$pk]]];
+            $this->key = $this->origin[$pk];
+        } elseif (is_array($pk)) {
+            foreach ($pk as $field) {
+                if (isset($this->origin[$field])) {
+                    $where[] = [$field, '=', $this->origin[$field]];
+                }
+            }
+        }
+
+        if (empty($this->updateWhere)) {
+            $where = empty($this->updateWhere) ? null : $this->updateWhere;
+        }
+
+        return $where;
+    }
+
+    /**
+     * Note: 批量保存数据到模型
+     * Date: 2023-06-09
+     * Time: 16:35
+     * @param iterable $dataSet 数据集合
+     * @param bool $replace 是否自动识别更新或写入
+     * @return Collection
+     */
+    public function saveAll(iterable $dataSet, bool $replace = true)
+    {
+        $query = $this->db();
+
+        $result = $query->transaction(function () use ($replace, $dataSet) {
+            $pk = $this->getPk();
+            if (is_string($pk) && $replace) {
+                $auto = true;
+            }
+
+            $result = [];
+            $suffix = $this->getSuffix();
+            foreach ($dataSet as $key => $data) {
+                if ($this->exists || (!empty($auto) || isset($data[$pk]))) {
+                    $result[$key] = static::update($data, [], [], $suffix);
+                } else {
+                    $result[$key] = static::create($data, $this->field, $this->replace, $suffix);
+                }
+            }
+
+            return $result;
+        });
+
+        return $this->toCollection($result);
+    }
+
+    /**
+     * Note: 写入数据
+     * Date: 2023-06-09
+     * Time: 17:13
+     * @param array $data 数据
+     * @param array $allowField 允许写入的字段
+     * @param bool $replace 是否自动更新或写入
+     * @param string $suffix 数据表后缀
+     * @return static
+     */
+    public static function create(array $data, array $allowField = [], bool $replace = false, string $suffix = '')
+    {
+        $model = new static();
+
+        if (!empty($allowField)) {
+            $model->allowField($allowField);
+        }
+
+        if (!empty($suffix)) {
+            $model->setSuffix($suffix);
+        }
+
+        $model->replace($replace)->save($data);
+
+        return $model;
+    }
+
+    /**
+     * Note: 删除当前记录
+     * Date: 2023-06-09
+     * Time: 17:34
+     * @return bool
+     */
     public function delete()
     {
+        if ($this->exists || $this->isEmpty() || $this->trigger('BeforeDelete')) {
+            return false;
+        }
 
+        $where = $this->getWhere();
+
+        $query = $this->db();
+        $query->transaction(function () use ($where, $query) {
+            $query->where($where)->delete();
+
+            if (!empty($this->relationWrite)) {
+                $this->autoRelationDelete();
+            }
+        });
+
+        $this->trigger('AfterDelete');
+
+        $this->exists = false;
+        $this->lazySave = false;
+
+        return true;
+    }
+
+    /**
+     * Note: 删除记录
+     * Date: 2023-06-09
+     * Time: 17:40
+     * @param int|string|array $data 主键列表,支持闭包查询条件
+     * @param bool $force
+     */
+    public static function destroy($data, bool $force = false)
+    {
+        if (empty($data)) {
+            return false;
+        }
+
+        $model = new static();
+        $query = $model->db();
+
+        if (is_array($data) && key($data) !== 0) {
+            $query->where($data);
+            $data = null;
+        } elseif ($data instanceof Closure) {
+            $data($query);
+            $data = null;
+        }
+
+        $resultSet = $query->select($data);
+
+        foreach ($resultSet as $result) {
+            $result->force($force)->delte();
+        }
+
+        return true;
+    }
+
+    /**
+     * Note: 更新数据
+     * Date: 2023-06-09
+     * Time: 17:24
+     * @param array $data 数据
+     * @param array $where 条件
+     * @param array $allowField 允许修改的字段
+     * @param string $suffix 数据表后缀
+     * @return static
+     */
+    public static function update(array $data, $where = [], array $allowField = [], string $suffix)
+    {
+        $model = new static();
+
+        if (!empty($allowField)) {
+            $model->allowField($allowField);
+        }
+
+        if (!empty($suffix)) {
+            $model->setSuffix($suffix);
+        }
+
+        $model->exists(true)->save($data);
+
+        return $model;
     }
 
     /**

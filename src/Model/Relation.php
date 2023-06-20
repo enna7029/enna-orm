@@ -220,6 +220,20 @@ abstract class Relation
     }
 
     /**
+     * Note: 获取模型的查询字段
+     * Date: 2023-06-12
+     * Time: 17:18
+     * @param string $model
+     * @return array|string
+     */
+    protected function getQueryFields(string $model)
+    {
+        $fields = $this->query->getOptions('field');
+
+        return $this->getRelationQueryFields($fields, $model);
+    }
+
+    /**
      * Note: 获取关联模型查询字段
      * Date: 2023-05-23
      * Time: 11:41

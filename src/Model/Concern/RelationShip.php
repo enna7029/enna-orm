@@ -13,6 +13,14 @@ use Closure;
 use Enna\Orm\Model\Relation\OneToOne;
 use Enna\Orm\Model\Relation\BelongsTo;
 use Enna\Orm\Db\Exception\DbException;
+use Enna\Orm\Model\Collection;
+use Enna\Orm\Model\Relation\HasManyThrough;
+use Enna\Orm\Model\Relation\HasOneThrough;
+use Enna\Orm\Model\Relation\BelongsToMany;
+use Enna\Orm\Model\Relation\MorphOne;
+use Enna\Orm\Model\Relation\MorphMany;
+use Enna\Orm\Model\Relation\MorphTo;
+use Enna\Orm\Model\Relation\MorphToMany;
 
 trait RelationShip
 {
@@ -147,62 +155,6 @@ trait RelationShip
     }
 
     /**
-     * Note: 一对一关联
-     * Date: 2023-05-22
-     * Time: 17:49
-     * @param string $model 关联模型类名
-     * @param string $foreignKey 外键:默认为当前模型名+_id
-     * @param string $localKey 主键:当前模型主键
-     * @return HasOne
-     */
-    public function hasOne(string $model, string $foreignKey = '', string $localKey = '')
-    {
-        $model = $this->parseModel($model);
-        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
-        $localKey = $localKey ?: $this->getPk();
-
-        return new HasOne($this, $model, $foreignKey, $localKey);
-    }
-
-    /**
-     * Note: belongsTo:从属关联
-     * Date: 2023-05-24
-     * Time: 18:04
-     * @param string $model 从属模型类名
-     * @param string $foreignKey 外键:从属模型名+_id
-     * @param string $localKey 主键:从属模型主键
-     * @return BelongsTo
-     */
-    public function belongsTo(string $model, string $foreignKey = '', string $localKey = '')
-    {
-        $model = $this->parseModel($model);
-        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
-        $localKey = $localKey ?: $this->getPk();
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
-        $relation = Str::snake($trace[1]['function']);
-
-        return new BelongsTo($this, $model, $foreignKey, $localKey, $relation);
-    }
-
-    /**
-     * Note: 一对多关联
-     * Date: 2023-05-25
-     * Time: 10:58
-     * @param string $model 关联模型类名
-     * @param string $foreignKey 外键:默认为当前模型名+_id
-     * @param string $localKey 主键:当前模型主键
-     * @return HasMany
-     */
-    public function hasMany(string $model, string $foreignKey = '', string $localKey = '')
-    {
-        $model = $this->parseModel($model);
-        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
-        $localKey = $localKey ?: $this->getPk();
-
-        return new HasMany($this, $model, $foreignKey, $localKey);
-    }
-
-    /**
      * Note: 根据关联条件查询当前模型
      * Date: 2023-05-25
      * Time: 11:11
@@ -233,24 +185,6 @@ trait RelationShip
     public static function hasWhere(string $relation, $where = [], string $fields = '*', string $joinType = '', Query $query = null)
     {
         return (new static())->$relation()->hasWhere($where, $fields, $joinType, $query);
-    }
-
-    /**
-     * Note: 检查属性是否为关联属性
-     * Date: 2023-05-16
-     * Time: 14:18
-     * @param string $attr 属性名
-     * @return string|false
-     */
-    protected function isRelationAttr(string $attr)
-    {
-        $relation = Str::camel($attr);
-
-        if ((method_exists($this, $relation) && !method_exists('Enna\Orm\Model', $relation)) || isset(static::$macro[static::class][$relation])) {
-            return $relation;
-        }
-
-        return false;
     }
 
     /**
@@ -463,28 +397,280 @@ trait RelationShip
     }
 
     /**
-     * Note: 自动关联数据的写入检查
-     * Date: 2023-05-25
-     * Time: 10:33
-     * @return void
+     * Note: 一对一关联
+     * Date: 2023-05-22
+     * Time: 17:49
+     * @param string $model 关联模型类名
+     * @param string $foreignKey 外键:默认为当前模型名+_id
+     * @param string $localKey 主键:当前模型主键
+     * @return HasOne
      */
-    protected function checkAutoRelationWrite()
+    public function hasOne(string $model, string $foreignKey = '', string $localKey = '')
     {
-        foreach ($this->together as $key => $name) {
-            if (is_array($name)) {
-                $this->relationWrite[$key] = [];
-                foreach ($name as $val) {
-                    if (isset($this->data[$val])) {
-                        $this->relationWrite[$key][$val] = $this->data[$val];
-                    }
-                }
-            } elseif (isset($this->relation[$name])) {
-                $this->relationWrite[$name] = $this->relation[$name];
-            } elseif (isset($this->data[$name])) {
-                $this->relationWrite[$name] = $this->data[$name];
-                unset($this->data[$name]);
-            }
+        $model = $this->parseModel($model);
+        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
+        $localKey = $localKey ?: $this->getPk();
+
+        return new HasOne($this, $model, $foreignKey, $localKey);
+    }
+
+    /**
+     * Note: belongsTo:从属关联(hasOne或hasMany)
+     * Date: 2023-05-24
+     * Time: 18:04
+     * @param string $model 从属模型类名
+     * @param string $foreignKey 外键:从属模型名+_id
+     * @param string $localKey 主键:从属模型主键
+     * @return BelongsTo
+     */
+    public function belongsTo(string $model, string $foreignKey = '', string $localKey = '')
+    {
+        $model = $this->parseModel($model);
+        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
+        $localKey = $localKey ?: $this->getPk();
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+        $relation = Str::snake($trace[1]['function']);
+
+        return new BelongsTo($this, $model, $foreignKey, $localKey, $relation);
+    }
+
+    /**
+     * Note: 一对多关联
+     * Date: 2023-05-25
+     * Time: 10:58
+     * @param string $model 关联模型类名
+     * @param string $foreignKey 外键:默认为当前模型名+_id
+     * @param string $localKey 主键:当前模型主键
+     * @return HasMany
+     */
+    public function hasMany(string $model, string $foreignKey = '', string $localKey = '')
+    {
+        $model = $this->parseModel($model);
+        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
+        $localKey = $localKey ?: $this->getPk();
+
+        return new HasMany($this, $model, $foreignKey, $localKey);
+    }
+
+    /**
+     * Note: 远程一对多关联
+     * Date: 2023-06-12
+     * Time: 15:29
+     * @param string $model 模型名
+     * @param string $through 中间模型名
+     * @param string $forgienKey 关联外键(中间表外键)
+     * @param string $throughKey 关联外键(中间关联表外键)
+     * @param string $localKey 当前主键(父模型主键)
+     * @param string $throughPk 中间表主键
+     * @return HasManyThrough
+     */
+    public function hasManyThrough(string $model, string $through, string $forgienKey = '', string $throughKey = '', string $localKey = '', string $throughPk = '')
+    {
+        $model = $this->parseModel($model);
+        $through = $this->parseModel($through);
+
+        $localKey = $localKey ?: $this->getPk();
+        $forgienKey = $forgienKey ?: $this->getForeignKey($this->name);
+
+        $throughPk = $through ?: (new $through)->getPk();
+        $throughKey = $throughKey ?: $this->getForeignKey((new $through)->getName());
+
+        return new HasManyThrough($this, $model, $through, $forgienKey, $throughKey, $localKey, $throughPk);
+    }
+
+    /**
+     * Note: 远程一对一关联
+     * Date: 2023-06-14
+     * Time: 11:20
+     * @param string $model 模型名
+     * @param string $through 中间模型名
+     * @param string $forgienKey 关联外键(中间表外键)
+     * @param string $throughKey 关联外键(中间关联表外键)
+     * @param string $localKey 当前主键(父模型主键)
+     * @param string $throughPk 中间表主键
+     * @return HasOneThrough
+     */
+    public function hasOneyThrough(string $model, string $through, string $forgienKey = '', string $throughKey = '', string $localKey = '', string $throughPk = '')
+    {
+        $model = $this->parseModel($model);
+        $through = $this->parseModel($through);
+
+        $localKey = $localKey ?: $this->getPk();
+        $forgienKey = $forgienKey ?: $this->getForeignKey($this->name);
+
+        $throughPk = $through ?: (new $through)->getPk();
+        $throughKey = $throughKey ?: $this->getForeignKey((new $through)->getName());
+
+        return new HasOneThrough($this, $model, $through, $forgienKey, $throughKey, $localKey, $throughPk);
+    }
+
+    /**
+     * Note: 多对多关联
+     * Date: 2023-06-14
+     * Time: 15:15
+     * @param string $model 模型名 如:role
+     * @param string $middle 中间表/模型名 如:access
+     * @param string $foreignKey 关联模型外键 如:role_id
+     * @param string $localKey 当前模型关联键 如:user_id
+     * @return BelongsToMany
+     */
+    public function belongsToMany(string $model, string $middle = '', string $foreignKey = '', string $localKey = '')
+    {
+        $model = $this->parseModel($model);
+
+        $name = Str::snake(class_basename($model));
+        $middle = $middle ?: Str::snake($this->name) . '_' . $name;
+
+        $foreignKey = $foreignKey ?: $name . '_id';
+        $localKey = $localKey ?: $this->getForeignKey($this->name);
+
+        return new BelongsToMany($this, $mode, $middle, $foreignKey, $localKey);
+    }
+
+    /**
+     * Note: 多态一对一
+     * Date: 2023-06-20
+     * Time: 10:43
+     * @param string $model 模型名
+     * @param string|array $morph 多态字段信息
+     * @param string $type 多态类型
+     * @return MorphOne
+     */
+    public function morphOne(string $model, $morph = null, string $type = '')
+    {
+        $model = $this->parseModel($model);
+
+        if (is_null($morph)) {
+            $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+            $morph = Str::snake($trace[1]['function']);
         }
+
+        $type = $type ?: get_class($this);
+
+        if (is_array($morph)) {
+            [$morphType, $foreignKey] = $morph;
+        } else {
+            $morphType = $morph . '_type';
+            $foreignKey = $morph . '_id';
+        }
+
+        return new MorphOne($this, $model, $foreignKey, $morphType, $type);
+    }
+
+    /**
+     * Note: 多态一对多
+     * Date: 2023-06-17
+     * Time: 16:13
+     * @param string $model 模型名
+     * @param array|string $morph 多态字段 [多态前缀_type,多态前缀_id] or '多态前缀'
+     * @param string $type 多态类型
+     * @return MorphMany
+     */
+    public function morphMany(string $model, $morph = null, string $type = '')
+    {
+        $model = $this->parseModel($model);
+
+        if (is_null($morph)) {
+            $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+            $morph = Str::snake($trace[1]['function']);
+        }
+
+        $type = $type ?: get_class($this);
+
+        if (is_array($morph)) {
+            [$morphType, $foreignKey] = $morph;
+        } else {
+            $morphType = $morph . '_type';
+            $foreignKey = $morph . '_id';
+        }
+
+        return new MorphMany($this, $model, $foreignKey, $morphType, $type);
+    }
+
+    /**
+     * Note: 从属关联(morphMany)
+     * Date: 2023-06-19
+     * Time: 14:46
+     * @param array|string $morph 多态字段
+     * @param array $alias 多态别名定义
+     * @return MorphTo
+     */
+    public function morphTo($morph = null, array $alias = [])
+    {
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+        $relation = Str::snake($trace[1]['function']);
+
+        if (is_null($morph)) {
+            $morph = $relation;
+        }
+
+        if (is_array($morph)) {
+            [$morphType, $foreignKey] = $morph;
+        } else {
+            $morphType = $morph . '_type';
+            $foreignKey = $morph . '_id';
+        }
+
+        return new MorphTo($this, $morphType, $foreignKey, $alias, $relation);
+    }
+
+    /**
+     * Note: 多态多对多关联
+     * Date: 2023-06-20
+     * Time: 12:04
+     * @param string $model 模型名
+     * @param string $middle 中间表模型名
+     * @param string|array $morph 多态字段 [多态前缀_type,多态前缀_id] or '多态前缀'
+     * @param string $localKey 当前模型关联键
+     * @return MorphToMany
+     */
+    public function morphToMany(string $model, string $middle, $morph = null, string $localKey = null)
+    {
+        if (is_null($morph)) {
+            $morph = $middle;
+        }
+
+        if (is_array($morph)) {
+            [$morphType, $foreignKey] = $morph;
+        } else {
+            $morphType = $morph . '_type';
+            $foreignKey = $morph . '_id';
+        }
+
+        $model = $this->parseModel($model);
+        $name = Str::snake(class_basename($model));
+        $localKey = $localKey ?: $this->getForeignKey($name);
+
+        return new MorphToMany($this, $model, $middle, $morphType, $morphKey, $localKey);
+    }
+
+    /**
+     * Note: 多态多对多关联(反向)
+     * Date: 2023-06-20
+     * Time: 13:55
+     * @param string $model 模型名
+     * @param string $middle 中间表模型名
+     * @param string|array $morph 多态字段 [多态前缀_type,多态前缀_id] or '多态前缀'
+     * @param string|null $forgienKey 当前模型关联键
+     * @return MorphToMany
+     */
+    public function morphByMany(string $model, string $middle, $morph = null, string $forgienKey = null)
+    {
+        if (is_null($morph)) {
+            $morph = $middle;
+        }
+
+        if (is_array($morph)) {
+            [$morphType, $foreignKey] = $morph;
+        } else {
+            $morphType = $morph . '_type';
+            $foreignKey = $morph . '_id';
+        }
+
+        $model = $this->parseModel($model);
+        $forgienKey = $forgienKey ?: $this->getForeignKey($this->name);
+
+        return new MorphToMany($this, $model, $middle, $morphType, $morphKey, $forgienKey, true);
     }
 
     /**
@@ -524,6 +710,24 @@ trait RelationShip
     }
 
     /**
+     * Note: 检查属性是否为关联属性
+     * Date: 2023-05-16
+     * Time: 14:18
+     * @param string $attr 属性名
+     * @return string|false
+     */
+    protected function isRelationAttr(string $attr)
+    {
+        $relation = Str::camel($attr);
+
+        if ((method_exists($this, $relation) && !method_exists('Enna\Orm\Model', $relation)) || isset(static::$macro[static::class][$relation])) {
+            return $relation;
+        }
+
+        return false;
+    }
+
+    /**
      * Note: 获取关联模型数据
      * Date: 2023-06-07
      * Time: 10:54
@@ -538,4 +742,101 @@ trait RelationShip
 
         return $modelRelation->getRealtion();
     }
+
+    /**
+     * Note: 自动关联数据的写入检查
+     * Date: 2023-05-25
+     * Time: 10:33
+     * @return void
+     */
+    protected function checkAutoRelationWrite()
+    {
+        foreach ($this->together as $key => $name) {
+            if (is_array($name)) {
+                $this->relationWrite[$key] = [];
+                foreach ($name as $val) {
+                    if (isset($this->data[$val])) {
+                        $this->relationWrite[$key][$val] = $this->data[$val];
+                    }
+                }
+            } elseif (isset($this->relation[$name])) {
+                $this->relationWrite[$name] = $this->relation[$name];
+            } elseif (isset($this->data[$name])) {
+                $this->relationWrite[$name] = $this->data[$name];
+                unset($this->data[$name]);
+            }
+        }
+    }
+
+    /**
+     * Note: 自动关联数据更新
+     * Date: 2023-06-08
+     * Time: 11:09
+     * @return void
+     */
+    public function autoRelationUpdate()
+    {
+        foreach ($this->relationWrite as $name => $val) {
+            if ($val instanceof Model) {
+                $val->exists(true)->save();
+            } else {
+                $model = $this->getRelation($name, true);
+
+                if ($model instanceof Model) {
+                    $model->exists(true)->save($val);
+                }
+            }
+        }
+    }
+
+    /**
+     * Note: 自动关联数据写入
+     * Date: 2023-06-08
+     * Time: 11:20
+     * @return void
+     */
+    protected function autoRelationInsert()
+    {
+        foreach ($this->relationWrite as $name => $val) {
+            $method = Str::camel($name);
+            $this->$method()->save($val);
+        }
+    }
+
+    /**
+     * Note: 自动关联数据删除
+     * Date: 2023-06-08
+     * Time: 15:43
+     * @param bool $force 强删除
+     * @return void
+     */
+    protected function autoRelationDelete($force = false)
+    {
+        foreach ($this->relationWrite as $key => $name) {
+            $name = is_numeric($key) ? $name : $key;
+            $result = $this->getRelation($name, true);
+
+            if ($result instanceof Model) {
+                $result->force($force)->delete();
+            } elseif ($result instanceof Collection) {
+                foreach ($result as $model) {
+                    $model->force($force)->delete();
+                }
+            }
+        }
+    }
+
+    /**
+     * Note: 移除当前模型的关联属性
+     * Date: 2023-06-08
+     * Time: 9:53
+     * @return $this
+     */
+    public function removeRelation()
+    {
+        $this->relation = [];
+
+        return $this;
+    }
+
 }

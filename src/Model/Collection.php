@@ -25,7 +25,7 @@ class Collection extends BaseCollection
     {
         if (!$this->isEmpty()) {
             $item = current($this->items);
-            $item->eagerlyResultSet($this->items, (array)$relation, [], false, $cache);
+            $item->withQuerySet($this->items, (array)$relation, [], false, $cache);
         }
 
         return $this;

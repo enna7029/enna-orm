@@ -264,7 +264,7 @@ class BelongsTo extends OneToOne
         } else {
             $relationModel = $data[$result->$foreignKey];
             $relationModel->setParent(clone $result);
-            $relationModel->exist(true);
+            $relationModel->exists(true);
         }
 
         if (!empty($this->bindAttr)) {

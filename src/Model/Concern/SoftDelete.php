@@ -141,10 +141,13 @@ trait SoftDelete
         }
 
         //关联删除
+        if (!empty($this->relationWrite)) {
+            $this->autoRelationDelete($force);
+        }
 
         $this->trigger('AfterDelete');
 
-        $this->exist(false);
+        $this->exists(false);
 
         return true;
     }

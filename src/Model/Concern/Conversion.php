@@ -7,6 +7,7 @@ use Enna\Framework\Helper\Str;
 use Enna\Orm\Db\Exception\DbException;
 use Enna\Orm\Model;
 use Enna\Orm\Model\Collection as ModelCollection;
+use Enna\Orm\Model\Relation\OneToOne;
 
 trait Conversion
 {
@@ -243,7 +244,7 @@ trait Conversion
             $value = $this->getAttr($name);
             $item[$name] = $value;
 
-            $this->getRelationAttrValue($name, $value, $item);
+            $this->getBindAttrValue($name, $value, $item);
         }
     }
 
@@ -256,7 +257,7 @@ trait Conversion
      * @param array $item 数据
      * @return void
      */
-    protected function getRelationAttrValue(string $name, $value, &$item)
+    protected function getBindAttrValue(string $name, $value, &$item)
     {
         $relation = $this->isRelationAttr($name);
         if (!$relation) {
@@ -264,8 +265,22 @@ trait Conversion
         }
 
         $modelRelation = $this->$relation();
-        if ($modelRelation) {
+        if ($modelRelation instanceof OneToOne) {
+            $bindAttr = $modelRelation->getBindAttr();
 
+            if (!empty($bindAttr)) {
+                unset($item[$name]);
+            }
+
+            foreach ($bindAttr as $key => $attr) {
+                $key = is_numeric($key) ? $attr : $key;
+
+                if (isset($item[$key])) {
+                    throw new DbException('bind attr has exists:' . $key);
+                }
+
+                $item[$key] = $value ? $value->getAttr($value) : $null;
+            }
         }
     }
 

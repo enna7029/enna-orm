@@ -1184,11 +1184,25 @@ abstract class BaseQuery
     public function parsePkWhere($data)
     {
         $pk = $this->getPk();
+
         if (is_string($pk)) {
+            if (empty($this->options['table'])) {
+                $this->options['table'] = $this->getTable();
+            }
+
+            $table = is_array($this->options['table']) ? key($this->options['table']) : $this->options['table'];
+
+            if (!empty($this->options['alias'][$table])) {
+                $alias = $this->options['alias'][$table];
+            }
+
+            $key = isset($alias) ? $alias . '.' . $pk : $pk;
+
             if (is_array($data)) {
                 $this->where($key, 'in', $data);
             } else {
                 $this->where($key, '=', $data);
+                $this->options['key'] = $data;
             }
         } elseif (is_array($pk)) {
             foreach ($pk as $field) {
