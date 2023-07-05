@@ -1,5 +1,5 @@
 <?php
-declare(strice_types=1);
+declare (strict_types = 1);
 
 namespace Enna\Orm;
 
@@ -133,7 +133,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     {
         $this->data = $data;
 
-        if (!empty($data)) {
+        if (!empty($this->data)) {
             foreach ($this->disuse as $key) {
                 if (array_key_exists($key, $this->data)) {
                     unset($this->data[$key]);
@@ -910,7 +910,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
      * @param string $suffix 数据表后缀
      * @return static
      */
-    public static function update(array $data, $where = [], array $allowField = [], string $suffix)
+    public static function update(array $data, $where = [], array $allowField = [], string $suffix = '')
     {
         $model = new static();
 

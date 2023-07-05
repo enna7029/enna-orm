@@ -1,5 +1,5 @@
 <?php
-declare(strict_types1=1);
+declare(strict_types=1);
 
 namespace Enna\Orm\Model\Concern;
 
@@ -9,6 +9,11 @@ use Enna\Orm\Model;
 use Enna\Orm\Model\Collection as ModelCollection;
 use Enna\Orm\Model\Relation\OneToOne;
 
+/**
+ * 模型数据转换处理
+ * Trait Conversion
+ * @package Enna\Orm\Model\Concern
+ */
 trait Conversion
 {
     /**
@@ -147,7 +152,7 @@ trait Conversion
      * Time: 16:50
      * @return array
      */
-    public function toArray()
+    public function toArray(): array
     {
         $item = [];
 
@@ -291,7 +296,7 @@ trait Conversion
      * @param integer $options json参数
      * @return string
      */
-    public function toJson(int $options = JSON_UNESCAPED_UNICODE)
+    public function toJson(int $options = JSON_UNESCAPED_UNICODE): string
     {
         return json_encode($this->toArray(), $options);
     }

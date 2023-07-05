@@ -8,6 +8,9 @@ use Closure;
 use Enna\Orm\Paginator\Driver\Bootstrap;
 use ArrayIterator;
 use JsonSerializable;
+use ArrayAccess;
+use Countable;
+use IteratorAggregate;
 
 abstract class Paginator implements ArrayAccess, Countable, IteratorAggregate, JsonSerializable
 {
@@ -268,24 +271,24 @@ abstract class Paginator implements ArrayAccess, Countable, IteratorAggregate, J
         return $this;
     }
 
-    public function offsetExists()
+    public function offsetExists($offset)
     {
-        return $this->items->offsetExists();
+        return $this->items->offsetExists($offset);
     }
 
-    public function offsetSet()
+    public function offsetSet($offset,$value)
     {
-        return $this->items->offsetSet();
+        return $this->items->offsetSet($offset,$value);
     }
 
-    public function offsetGet()
+    public function offsetGet($offset)
     {
-        return $this->items->offsetGet();
+        return $this->items->offsetGet($offset);
     }
 
-    public function offsetUnset()
+    public function offsetUnset($offset)
     {
-        return $this->items->offsetUnset();
+        return $this->items->offsetUnset($offset);
     }
 
     public function count()
