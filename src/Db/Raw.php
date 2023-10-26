@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db;
 
+/**
+ * SQL原始类
+ * Class Raw
+ * @package Enna\Orm\Db
+ */
 class Raw
 {
     /**

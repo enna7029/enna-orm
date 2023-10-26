@@ -8,6 +8,11 @@ use Enna\Orm\Db\Query;
 use Enna\Orm\Db\Raw;
 use Enna\Orm\Db\Exception\DbException;
 
+/**
+ * MySQL解析类
+ * Class Mysql
+ * @package Enna\Orm\Db\Builder
+ */
 class Mysql extends Builder
 {
     /**
@@ -292,7 +297,7 @@ class Mysql extends Builder
     }
 
     /**
-     * Note: 字段处理
+     * Note: 字段处理:field,table,group,order
      * Date: 2023-04-27
      * Time: 16:37
      * @param Query $query 查询对象
@@ -310,14 +315,23 @@ class Mysql extends Builder
 
         $key = trim($key);
 
-        if (strpos($key, '->') && strpos($key, '(') === false) {
+        if (strpos($key, '->>') && false === strpos($key, '(')) {
+            [$field, $name] = explode('->>', $key, 2);
+
+            return $this->parseKey($query, $field, true) . '->>\'$' . (strpos($name, '[') === 0 ? '' : '.') . str_replace('->>', '.', $name) . '\'';
+        } elseif (strpos($key, '->') && strpos($key, '(') === false) {
             [$field, $name] = explode('->', $key, 2);
 
-            return 'json_extract(' . $this->parseKey($query, $field, true) . ', \'$.' . $name . ')';
+            return 'json_extract(' . $this->parseKey($query, $field, true) . ', \'$' . (strpos($name, '[') === 0 ? '' : '.') . str_replace('->', '.', $name) . '\')';
         } elseif (strpos($key, '.') && !preg_match('/[,\'\"\(\)`\s]]/', $key)) {
             [$table, $key] = explode('.', $key, 2);
 
             $alias = $query->getOptions('alias');
+
+            if ($table == '__TABLE__') {
+                $table = $query->getOptions('table');
+                $table = is_array($table) ? array_shift($table) : $table;
+            }
 
             if (isset($alias[$table])) {
                 $table = $alias[$table];
@@ -369,11 +383,11 @@ class Mysql extends Builder
             $partition = explode(',', $partition);
         }
 
-        return 'PARTITION(' . implode(', ', $partition) . ')';
+        return 'PARTITION (' . implode(' , ', $partition) . ')';
     }
 
     /**
-     * Note: ON DUPLICATE KEY UPDATE分析
+     * Note: ON DUPLICATE KEY UPDATE分析:用于在插入数据时,出现重复的关键字(通常为唯一索引或主键),则执行更新操作而不是插入新纪录
      * Date: 2023-04-28
      * Time: 11:43
      * @param Query $query 查询对象
@@ -402,7 +416,7 @@ class Mysql extends Builder
             } elseif ($val instanceof Raw) {
                 $updates[] = $this->parseKey($query, $key) . ' = ' . $this->parseRaw($query, $val);
             } else {
-                $name = $query->bindValue($this->getConnection()->getFieldBindType($key));
+                $name = $query->bindValue($val, $this->getConnection()->getFieldBindType($key));
                 $updates[] = $this->parseKey($query, $key) . ' = : ' . $name;
             }
         }

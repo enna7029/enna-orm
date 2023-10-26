@@ -8,6 +8,10 @@ use Enna\Orm\DbManager;
 use Enna\Orm\Facade\Db;
 use Psr\SimpleCache\CacheInterface;
 
+/**
+ * Interface ConnectionInterface
+ * @package Enna\Orm\Contract
+ */
 interface ConnectionInterface
 {
     /**

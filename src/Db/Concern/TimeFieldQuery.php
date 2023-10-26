@@ -12,14 +12,14 @@ trait TimeFieldQuery
 {
 
     protected $timeRule = [
-        'today' => ['tody', 'tomorrow -1second'],
-        'yesterday' => ['yesterday', 'today -1second'],
-        'week' => ['this week 00:00:00', 'next week 00:00:00 -1second'],
-        'last week' => ['last week 00:00:00', 'this week 00:00:00 -1second'],
-        'month' => ['first day of this month 00:00:00', 'first day of next month 00:00:00 -1second'],
+        'today'      => ['tody', 'tomorrow -1second'],
+        'yesterday'  => ['yesterday', 'today -1second'],
+        'week'       => ['this week 00:00:00', 'next week 00:00:00 -1second'],
+        'last week'  => ['last week 00:00:00', 'this week 00:00:00 -1second'],
+        'month'      => ['first day of this month 00:00:00', 'first day of next month 00:00:00 -1second'],
         'last month' => ['first day of last month 00:00:00', 'first day of this month 00:00:00 -1second'],
-        'year' => ['this year 1/1', 'next year 1/1 -1second'],
-        'last year' => ['last year 1/1', 'this year 1/1 -1second'],
+        'year'       => ['this year 1/1', 'next year 1/1 -1second'],
+        'last year'  => ['last year 1/1', 'this year 1/1 -1second'],
     ];
 
     /**

@@ -9,6 +9,6 @@ class Db extends Facade
 {
     protected static function getFacadeClass()
     {
-        return 'Enna\Orn\DbManager';
+        return 'Enna\Orm\DbManager';
     }
 }

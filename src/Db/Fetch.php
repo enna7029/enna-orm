@@ -132,7 +132,7 @@ class Fetch
 
         $sql = $this->builder->insertAll($this->query, $dataSet);
 
-        return $sql;
+        return $this->fetch($sql);
     }
 
     /**
@@ -202,6 +202,7 @@ class Fetch
         if (empty($options['where'])) {
             if (is_string($pk) && isset($data[$pk])) {
                 $this->query->where($pk, '=', $data[$pk]);
+                unset($data[$pk]);
             } elseif (is_array($pk)) {
                 foreach ($pk as $field) {
                     if (isset($data[$field])) {
@@ -451,7 +452,7 @@ class Fetch
      */
     public function selectOrFail($data = null)
     {
-        return $this->selectInsert($data);
+        return $this->select($data);
     }
 
     /**
@@ -479,6 +480,6 @@ class Fetch
         }
 
         $result = call_user_func_array([$this->query, $method], $args);
-        return $result == $this->query ? $this : $result;
+        return $result === $this->query ? $this : $result;
     }
 }

@@ -16,7 +16,7 @@ use Enna\Orm\Model;
 use Closure;
 
 /**
- * 数据库连接基础类
+ * PDO方式数据库连接基础类
  * @property PDO[] $links
  * @property PDO $linkID
  * @property PDO $linkRead
@@ -164,6 +164,34 @@ class PDOConnection extends Connection
         'server has gone away',
         'no connection to the server',
         'Lost connection',
+        'is dead or not enabled',
+        'Error while sending',
+        'decryption failed or bad record mac',
+        'server closed the connection unexpectedly',
+        'SSL connection has been closed unexpectedly',
+        'Error writing data to the connection',
+        'Resource deadlock avoided',
+        'failed with errno',
+        'child connection forced to terminate due to client_idle_limit',
+        'query_wait_timeout',
+        'reset by peer',
+        'Physical connection is not usable',
+        'TCP Provider: Error code 0x68',
+        'ORA-03114',
+        'Packets out of order. Expected',
+        'Adaptive Server connection failed',
+        'Communication link failure',
+        'connection is no longer usable',
+        'Login timeout expired',
+        'SQLSTATE[HY000] [2002] Connection refused',
+        'running with the --read-only option so it cannot execute this statement',
+        'The connection is broken and recovery is not possible. The connection is marked by the client driver as unrecoverable. No attempt was made to restore the connection.',
+        'SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo failed: Try again',
+        'SQLSTATE[HY000] [2002] php_network_getaddresses: getaddrinfo failed: Name or service not known',
+        'SQLSTATE[HY000]: General error: 7 SSL SYSCALL error: EOF detected',
+        'SQLSTATE[HY000] [2002] Connection timed out',
+        'SSL: Connection timed out',
+        'SQLSTATE[HY000]: General error: 1105 The last transaction was aborted due to Seamless Scaling. Please retry.',
     ];
 
     /**
@@ -214,31 +242,6 @@ class PDOConnection extends Connection
      * @return array
      */
     abstract function getTables(string $dbName = '');
-
-    /**
-     * Note: 获取数据表信息
-     * Date: 2023-03-28
-     * Time: 17:45
-     * @param mixed $tableName 数据表名
-     * @param string $fetch 获取信息类型
-     * @return mixed
-     */
-    public function getTableInfo($tableName, string $fetch = '')
-    {
-        if (is_array($tableName)) {
-            $tableName = key($tableName) ?: current($tableName);
-        }
-
-        if (strpos($tableName, ',') || strpos($tableName, ')')) {
-            return [];
-        }
-
-        [$tableName] = explode(' ', $tableName);
-
-        $info = $this->getSchemaInfo($tableName);
-
-        return $fetch ? $info[$fetch] : $info;
-    }
 
     /**
      * Note: 获取数据表主键
@@ -304,6 +307,31 @@ class PDOConnection extends Connection
     public function getFieldsBind($tableName)
     {
         return $this->getTableInfo($tableName, 'bind');
+    }
+
+    /**
+     * Note: 获取数据表信息
+     * Date: 2023-03-28
+     * Time: 17:45
+     * @param mixed $tableName 数据表名
+     * @param string $fetch 获取信息类型
+     * @return mixed
+     */
+    public function getTableInfo($tableName, string $fetch = '')
+    {
+        if (is_array($tableName)) {
+            $tableName = key($tableName) ?: current($tableName);
+        }
+
+        if (strpos($tableName, ',') || strpos($tableName, ')')) {
+            return [];
+        }
+
+        [$tableName] = explode(' ', $tableName);
+
+        $info = $this->getSchemaInfo($tableName);
+
+        return $fetch ? $info[$fetch] : $info;
     }
 
     /**
@@ -661,11 +689,12 @@ class PDOConnection extends Connection
     {
         try {
             //初始化连接
-            $this->initConnect($master);
+            $this->initConnect($this->readMaster ?: $master);
 
             //初始化参数
             $this->queryStr = $sql;
             $this->bind = $bind;
+
             $this->db->getQueryTimes();
             $this->queryStartTime = microtime(true);
 
@@ -692,11 +721,11 @@ class PDOConnection extends Connection
 
             return $this->PDOStatement;
         } catch (Throwable | Exception $e) {
-            if ($this->transTimes > 0) {
+            if ($this->transTimes > 0) { //事务操作时,中断执行,防止造成数据污染
                 if ($this->isBreak($e)) {
                     $this->transTimes = 0;
                 }
-            } else {
+            } else { //尝试次数小于4,并且支持断线重连(捕获错误),则重新连接
                 if ($this->reConnectTimes < 4 && $this->isBreak($e)) {
                     ++$this->reConnectTimes;
                     return $this->close()->getPDOStatement($sql, $bind, $master, $procedure);
@@ -1716,7 +1745,7 @@ class PDOConnection extends Connection
         $autoinc = $query->getAutoInc();
 
         if ($autoinc) {
-            $type = $this->getFieldBindType($autoinc);
+            $type = $this->getFieldBindType($this->getFieldsType($autoinc));
 
             if ($type == PDO::PARAM_INT) {
                 $insertId = (int)$insertId;

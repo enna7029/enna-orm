@@ -8,8 +8,12 @@ use Enna\Orm\Contract\ConnectionInterface;
 use Closure;
 use Enna\Orm\Db\Exception\DbException;
 use PDO;
-use Predis\Command\Redis\QUIT;
 
+/**
+ * 解析基础类
+ * Class Builder
+ * @package Enna\Orm\Db
+ */
 abstract class Builder
 {
     /**
@@ -110,143 +114,6 @@ abstract class Builder
     }
 
     /**
-     * Note: table分析
-     * Date: 2023-03-30
-     * Time: 14:54
-     * @param Query $query 查询对象
-     * @param mixed $tables 表名
-     * @return string
-     */
-    protected function parseTable(Query $query, $tables)
-    {
-        $item = [];
-        $options = $query->getOptions();
-
-        foreach ((array)$tables as $key => $table) {
-            if ($table instanceof Raw) {
-                $item[] = $this->parseRaw($query, $table);
-            } elseif (!is_numeric($key)) {
-                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $table);
-            } elseif (isset($options['alias'][$key])) {
-                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $options['alias'][$table]);
-            } else {
-                $item[] = $this->parseKey($query, $table);
-            }
-        }
-
-        return implode(',', $item);
-    }
-
-    /**
-     * Note: distinct分析
-     * Date: 2023-03-30
-     * Time: 16:42
-     * @param Query $query 查询对象
-     * @param bool $distinct 是否返回唯一值
-     * @return string
-     */
-    protected function parseDistinct(Query $query, bool $distinct = false)
-    {
-        return !empty($distinct) ? 'DISTINCT ' : '';
-    }
-
-    /**
-     * Note:
-     * Date: 2023-03-30
-     * Time: 16:43
-     * @param Query $query 查询对象
-     * @param string $extra 额外参数
-     * @return string
-     */
-    protected function parseExtra(Query $query, string $extra)
-    {
-        return preg_match('/^[\w]+$/i', $extra) ? ' ' . $extra : '';
-    }
-
-    /**
-     * Note: field分析
-     * Date: 2023-03-30
-     * Time: 17:33
-     * @param Query $query 查询对象
-     * @param mixed $fields 字段名
-     * @return string
-     */
-    protected function parseField(Query $query, $fields)
-    {
-        if (is_array($fields)) {
-            $array = [];
-
-            foreach ($fields as $key => $field) {
-                if ($fields instanceof Raw) {
-                    $array[] = $this->parseKey($query, $field);
-                } elseif (!is_numeric($key)) {
-                    $array[] = $this->parseKey($query, $key) . ' AS ' . $this->parseKey($query, $field, true);
-                } else {
-                    $array[] = $this->parseKey($query, $field);
-                }
-            }
-
-            $fieldsStr = implode(',', $array);
-        } else {
-            $fieldsStr = '*';
-        }
-
-        return $fieldsStr;
-    }
-
-    /**
-     * Note: index 索引提示分析,可以在操作中指定需要强制使用的索引
-     * Date: 2023-04-27
-     * Time: 12:09
-     * @param Query $query 查询对象
-     * @param mixed $index 索引名称
-     * @return string
-     */
-    protected function parseForce(Query $query, $index)
-    {
-        if (empty($index)) {
-            return '';
-        }
-
-        if (is_array($index)) {
-            $index = implode(',', $index);
-        }
-
-        return sprintf(" FORCE INDEX (%s) ", $index);
-    }
-
-    /**
-     * Note: join分析
-     * Date: 2023-04-27
-     * Time: 14:53
-     * @param Query $query 查询对象
-     * @param array $join JOIN条件
-     * @return string
-     */
-    protected function parseJoin(Query $query, array $join)
-    {
-        $joinStr = '';
-
-        foreach ($join as $item) {
-            [$table, $type, $on] = $item;
-
-            if (strpos($on, '=')) {
-                [$val1, $val2] = explode('=', $on, 2);
-
-                $condition = $this->parseKey($query, $val1) . '=' . $this->parseKey($query, $val2);
-            } else {
-                $condition = $on;
-            }
-
-            $table = $this->parseTable($query, $table);
-
-            $joinStr .= ' ' . $type . ' JOIN ' . $table . ' ON ' . $condition;
-        }
-
-        return $joinStr;
-    }
-
-    /**
      * Note: where分析
      * Date: 2023-04-27
      * Time: 17:22
@@ -286,8 +153,8 @@ abstract class Builder
 
         $whereStr = '';
 
-
         $binds = $query->getFieldsBindType();
+
         foreach ($where as $logic => $val) {
             $str = $this->parseWhereLogic($query, $logic, $val, $binds);
 
@@ -449,7 +316,7 @@ abstract class Builder
      * @param array $binds 参数绑定
      * @return string
      */
-    protected function parseWhereItem(Query $query, $field, array $condition, array $binds)
+    protected function parseWhereItem(Query $query, $field, array $condition, array $binds = [])
     {
         $key = $field ? $this->parseKey($query, $field, true) : '';
 
@@ -463,7 +330,17 @@ abstract class Builder
             $exp = $this->exp[$exp];
         }
 
-        $bindType = $binds[$field] ?? PDO::PARAM_STR;
+        if (is_string($field) && $exp != 'LIKE') {
+            $bindType = $binds[$field] ?? PDO::PARAM_STR;
+        } else {
+            $bindType = PDO::PARAM_STR;
+        }
+
+        if ($value instanceof Raw) {
+
+        } elseif (is_object($value) && method_exists($value, '__toString')) {
+            $value = $value->__toString();
+        }
 
         if (is_scalar($value) && !in_array($exp, ['EXP', 'NOT NULL', 'NULL', 'IN', 'NOT IN', 'BETWEEN', 'NOT BETWEEN']) && strpos($exp, 'TIME') === false) {
             $name = $query->bindValue($value, $bindType);
@@ -472,7 +349,7 @@ abstract class Builder
 
         foreach ($this->parser as $fun => $parse) {
             if (in_array($exp, $parse)) {
-                return $this->$fun($query, $key, $exp, $value, $field, $bindType, $val[2] ?? 'AND');
+                return $this->$fun($query, $key, $exp, $value, $field, $bindType, $condition[2] ?? 'AND');
             }
         }
 
@@ -580,7 +457,7 @@ abstract class Builder
             $value = array_unique(is_array($value) ? $value : explode(',', $value));
 
             if (count($value) === 0) {
-                return $exp == 'IN' ? '0=1' : '1=1';
+                return $exp == 'IN' ? '0 = 1' : '1 = 1';
             }
 
             $array = [];
@@ -671,7 +548,7 @@ abstract class Builder
      */
     protected function parseTime(Query $query, string $key, string $exp, $value, $field, int $bindType)
     {
-        return $key . ' ' . substr($exp, 0, -4) . ' ' . $this->parseDateTime($query, $value, $field, $bindType);
+        return $key . ' ' . substr($exp, 0, 2) . ' ' . $this->parseDateTime($query, $value, $field, $bindType);
     }
 
     /**
@@ -754,6 +631,143 @@ abstract class Builder
         }
 
         return '( ' . $key . ' ' . $op . ' ' . $this->parseKey($query, $field, true) . ' )';
+    }
+
+    /**
+     * Note: table分析
+     * Date: 2023-03-30
+     * Time: 14:54
+     * @param Query $query 查询对象
+     * @param mixed $tables 表名
+     * @return string
+     */
+    protected function parseTable(Query $query, $tables)
+    {
+        $item = [];
+        $options = $query->getOptions();
+
+        foreach ((array)$tables as $key => $table) {
+            if ($table instanceof Raw) {
+                $item[] = $this->parseRaw($query, $table);
+            } elseif (!is_numeric($key)) {
+                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $table);
+            } elseif (isset($options['alias'][$key])) {
+                $item[] = $this->parseKey($query, $key) . ' ' . $this->parseKey($query, $options['alias'][$table]);
+            } else {
+                $item[] = $this->parseKey($query, $table);
+            }
+        }
+
+        return implode(',', $item);
+    }
+
+    /**
+     * Note: field分析
+     * Date: 2023-03-30
+     * Time: 17:33
+     * @param Query $query 查询对象
+     * @param mixed $fields 字段名
+     * @return string
+     */
+    protected function parseField(Query $query, $fields)
+    {
+        if (is_array($fields)) {
+            $array = [];
+
+            foreach ($fields as $key => $field) {
+                if ($fields instanceof Raw) {
+                    $array[] = $this->parseKey($query, $field);
+                } elseif (!is_numeric($key)) {
+                    $array[] = $this->parseKey($query, $key) . ' AS ' . $this->parseKey($query, $field, true);
+                } else {
+                    $array[] = $this->parseKey($query, $field);
+                }
+            }
+
+            $fieldsStr = implode(',', $array);
+        } else {
+            $fieldsStr = '*';
+        }
+
+        return $fieldsStr;
+    }
+
+    /**
+     * Note: index 索引提示分析,可以在操作中指定需要强制使用的索引
+     * Date: 2023-04-27
+     * Time: 12:09
+     * @param Query $query 查询对象
+     * @param mixed $index 索引名称
+     * @return string
+     */
+    protected function parseForce(Query $query, $index)
+    {
+        if (empty($index)) {
+            return '';
+        }
+
+        if (is_array($index)) {
+            $index = implode(',', $index);
+        }
+
+        return sprintf(" FORCE INDEX (%s) ", $index);
+    }
+
+    /**
+     * Note: join分析
+     * Date: 2023-04-27
+     * Time: 14:53
+     * @param Query $query 查询对象
+     * @param array $join JOIN条件
+     * @return string
+     */
+    protected function parseJoin(Query $query, array $join)
+    {
+        $joinStr = '';
+
+        foreach ($join as $item) {
+            [$table, $type, $on] = $item;
+
+            if (strpos($on, '=')) {
+                [$val1, $val2] = explode('=', $on, 2);
+
+                $condition = $this->parseKey($query, $val1) . '=' . $this->parseKey($query, $val2);
+            } else {
+                $condition = $on;
+            }
+
+            $table = $this->parseTable($query, $table);
+
+            $joinStr .= ' ' . $type . ' JOIN ' . $table . ' ON ' . $condition;
+        }
+
+        return $joinStr;
+    }
+
+    /**
+     * Note: distinct分析
+     * Date: 2023-03-30
+     * Time: 16:42
+     * @param Query $query 查询对象
+     * @param bool $distinct 是否返回唯一值
+     * @return string
+     */
+    protected function parseDistinct(Query $query, bool $distinct = false)
+    {
+        return !empty($distinct) ? ' DISTINCT ' : '';
+    }
+
+    /**
+     * Note:
+     * Date: 2023-03-30
+     * Time: 16:43
+     * @param Query $query 查询对象
+     * @param string $extra 额外参数
+     * @return string
+     */
+    protected function parseExtra(Query $query, string $extra)
+    {
+        return preg_match('/^[\w]+$/i', $extra) ? ' ' . strtoupper($extra) : '';
     }
 
     /**
@@ -919,7 +933,7 @@ abstract class Builder
      */
     protected function parseLimit(Query $query, string $limit)
     {
-        return !empty($limit) ? ' LIMIT ' . $limit : '';
+        return (!empty($limit) && strpos($limit, '(') === false) ? ' LIMIT ' . $limit . ' ' : '';
     }
 
     /**

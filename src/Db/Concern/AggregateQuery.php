@@ -36,7 +36,10 @@ trait AggregateQuery
     public function count(string $field = '*')
     {
         if (!empty($this->options['group'])) {
-            $subSql = $this->field('count(' . $field . ') as count')
+            $options = $this->getOptions();
+
+            $subSql = $this->options($options)
+                ->field('count(' . $field . ') as count')
                 ->bind($this->bind)
                 ->buildSql();
 

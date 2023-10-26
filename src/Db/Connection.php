@@ -7,6 +7,11 @@ use Enna\Orm\Contract\ConnectionInterface;
 use Enna\Orm\DbManager;
 use Psr\SimpleCache\CacheInterface;
 
+/**
+ * 数据库连接基础类
+ * Class Connection
+ * @package Enna\Orm\Db
+ */
 abstract class Connection implements ConnectionInterface
 {
     /**
@@ -112,11 +117,15 @@ abstract class Connection implements ConnectionInterface
     public function newQuery()
     {
         $class = $this->getQueryClass();
-
         /**
          * @var BaseQuery $query
          */
         $query = new $class($this);
+
+        $timeRule = $this->db->getConfig('time_query_rule');
+        if (!empty($timeRule)) {
+            $query->timeRule($timeRule);
+        }
 
         return $query;
     }
@@ -253,6 +262,25 @@ abstract class Connection implements ConnectionInterface
     }
 
     /**
+     * Note: 分析缓存key
+     * Date: 2023-03-22
+     * Time: 15:19
+     * @param BaseQuery $query 查询对象
+     * @param string $method 查询方法
+     * @return string
+     */
+    protected function getCacheKey(BaseQuery $query, string $method = '')
+    {
+        if (!empty($query->getOptions('key')) && empty($method)) {
+            $key = 'enna_' . $this->getConfig('database') . '.' . $query->getTable() . '|' . $query->getOptions('key');
+        } else {
+            $key = 'cache_key_123';
+        }
+
+        return $key;
+    }
+
+    /**
      * Note: 分析缓存
      * Date: 2023-03-21
      * Time: 18:47
@@ -277,25 +305,6 @@ abstract class Connection implements ConnectionInterface
         }
 
         return $cacheItem;
-    }
-
-    /**
-     * Note: 分析缓存key
-     * Date: 2023-03-22
-     * Time: 15:19
-     * @param BaseQuery $query 查询对象
-     * @param string $method 查询方法
-     * @return string
-     */
-    protected function getCacheKey(BaseQuery $query, string $method = '')
-    {
-        if (!empty($query->getOptions('key')) && empty($method)) {
-            $key = 'enna_' . $this->getConfig('database') . '.' . $query->getTable() . '|' . $query->getOptions('key');
-        } else {
-            $key = 'cache_key_123';
-        }
-
-        return $key;
     }
 
     /**

@@ -10,6 +10,11 @@ use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 use Enna\Orm\Db\Raw;
 
+/**
+ * 数据库管理基础类
+ * Class DbManager
+ * @package Enna\Orm
+ */
 class DbManager
 {
     /**
@@ -25,6 +30,30 @@ class DbManager
     protected $config;
 
     /**
+     * 查询事件
+     * @var object|array
+     */
+    protected $event;
+
+    /**
+     * 查询日志对象
+     * @var LoggerInterface
+     */
+    protected $log;
+
+    /**
+     * 查询缓存对象
+     * @var CacheInterface
+     */
+    protected $cache;
+
+    /**
+     * 查询次数
+     * @var int
+     */
+    protected $queryTimes = 0;
+
+    /**
      * SQL监听
      * @var array
      */
@@ -36,36 +65,39 @@ class DbManager
      */
     protected $dbLog = [];
 
-    /**
-     * 查询事件
-     * @var object|array
-     */
-    protected $event;
-
-    /**
-     * 查询次数
-     * @var int
-     */
-    protected $queryTimes = 0;
-
-    /**
-     * 查询缓存对象
-     * @var CacheInterface
-     */
-    protected $cache;
-
-    /**
-     * 查询日志对象
-     * @var LoggerInterface
-     */
-    protected $log;
-
     public function __construct()
+    {
+        $this->modelMaker();
+    }
+
+    /**
+     * Note: 注入模型对象
+     * Date: 2023-10-11
+     * Time: 16:28
+     * @return void
+     */
+    protected function modelMaker()
     {
         Model::setDb($this);
 
-        Model::maker(function (Model $model) {
+        if (is_object($this->event)) {
+            Model::setEvent($this->event);
+        }
 
+        Model::maker(function (Model $model) {
+            $isAutoWriteTimestamp = $model->getAutoWriteTimestamp();
+
+            if (is_null($isAutoWriteTimestamp)) {
+                // 自动写入时间戳
+                $model->isAutoWriteTimestamp($this->getConfig('auto_timestamp', true));
+            }
+
+            $dateFormat = $model->getDateFormat();
+
+            if (is_null($dateFormat)) {
+                // 设置时间戳格式
+                $model->setDateFormat($this->getConfig('datetime_format', 'Y-m-d H:i:s'));
+            }
         });
     }
 
@@ -110,7 +142,7 @@ class DbManager
         $connections = $this->getConfig('connections');
 
         if (!isset($connections[$name])) {
-            throw new InvalidArgumentException('未定义的db配置' . $name);
+            throw new InvalidArgumentException('Undefined db config:' . $name);
         }
 
         return $connections[$name];
@@ -198,6 +230,36 @@ class DbManager
     }
 
     /**
+     * Note: 注册数据库回调事件
+     * Date: 2023-03-21
+     * Time: 11:19
+     * @param string $event 事件名
+     * @param callable $callback 回调方法
+     * @return void
+     */
+    public function event(string $event, callable $callback)
+    {
+        $this->event[$event][] = $callback;
+    }
+
+    /**
+     * Note: 触发事件
+     * Date: 2023-03-21
+     * Time: 11:23
+     * @param string $event 事件名
+     * @param mixed $params 参数
+     * @return mixed
+     */
+    public function trigger(string $event, $params = null)
+    {
+        if (isset($this->event[$event])) {
+            foreach ($this->event[$event] as $callback) {
+                call_user_func_array($callback, $params);
+            }
+        }
+    }
+
+    /**
      * Note: 使用表达式设置数据
      * Date: 2023-03-21
      * Time: 11:08
@@ -243,33 +305,13 @@ class DbManager
     }
 
     /**
-     * Note: 注册数据库回调事件
-     * Date: 2023-03-21
-     * Time: 11:19
-     * @param string $event 事件名
-     * @param callable $callback 回调方法
+     * Note: 监听SQL
+     * Date: 2023-10-11
+     * Time: 16:00
      * @return void
      */
-    public function event(string $event, callable $callback)
+    public function triggerSql()
     {
-        $this->event[$event][] = $callback;
-    }
-
-    /**
-     * Note: 触发事件
-     * Date: 2023-03-21
-     * Time: 11:23
-     * @param string $event 事件名
-     * @param mixed $params 参数
-     * @return mixed
-     */
-    public function trigger(string $event, $params = null)
-    {
-        if (isset($this->event[$event])) {
-            foreach ($this->event[$event] as $callback) {
-                call_user_func_array($callback, $params);
-            }
-        }
     }
 
     /**

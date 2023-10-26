@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db\Concern;
 
+use Enna\Framework\Helper\Str;
 use Enna\Framework\Helper\Collection;
 use Enna\Orm\Db\Exception\DataNotFoundException;
 use Enna\Orm\Db\Exception\DbException;
@@ -93,7 +94,7 @@ trait ResultOperation
         if (!empty($this->options['fail'])) {
             $this->throwNotFound();
         } elseif (!empty($this->options['allow_empty'])) {
-            return [];
+            return !empty($this->model) ? $this->model->newInstance() : [];
         }
     }
 
@@ -162,9 +163,7 @@ trait ResultOperation
             $this->getResultAttr($result, $this->options['with_attr']);
         }
 
-        if (!empty($this->options['visiable']) || !empty($this->options['hidden'])) {
-            $this->filterResult($result);
-        }
+        $this->filterResult($result);
     }
 
     /**
@@ -208,7 +207,19 @@ trait ResultOperation
      */
     protected function getResultAttr(array &$result, array $withAttr = [])
     {
+        foreach ($withAttr as $name => $closure) {
+            $name = Str::snake($name);
 
+            if (strpos($name, '.')) {
+                [$key, $field] = explode('.', $name);
+
+                if (isset($result[$key])) {
+                    $result[$key][$field] = $closure($result[$key][$field] ?? null, $result);
+                }
+            } else {
+                $result[$name] = $closure($result[$name] ?? null, $result);
+            }
+        }
     }
 
     /**

@@ -21,6 +21,9 @@ abstract class BaseQuery
     use Concern\AggregateQuery;
     use Concern\ResultOperation;
     use Concern\TimeFieldQuery;
+    use Concern\TableFieldInfo;
+    use Concern\ParamsBind;
+    use Concern\JoinAndViewQuery;
 
     /**
      * 当前数据库连接对象
@@ -117,16 +120,16 @@ abstract class BaseQuery
     public function table($table)
     {
         if (is_string($table)) {
-            if (strpos($table, ')')) {
+            if (strpos($table, ')')) { // 子查询
 
-            } elseif (strpos($table, ',') === false) {
+            } elseif (strpos($table, ',') === false) { //单个表
                 if (strpos($table, ' ')) {
                     [$item, $alias] = explode(' ', $table);
                     $table = [];
                     $this->alias([$item => $alias]);
                     $table[$item] = $alias;
                 }
-            } else {
+            } else { //多个表
                 $tables = explode(',', $table);
                 $table = [];
                 foreach ($tables as $item) {
@@ -341,7 +344,7 @@ abstract class BaseQuery
      */
     public function getName()
     {
-        return $this->name;
+        return $this->name ?: $this->model->getName();
     }
 
     /**
@@ -505,6 +508,20 @@ abstract class BaseQuery
     }
 
     /**
+     * Note: 设置自增序列号
+     * Date: 2023-10-13
+     * Time: 15:44
+     * @param string|null $sequence 自增序列号
+     * @return mixed'
+     */
+    public function sequence(string $sequence = null)
+    {
+        $this->options['sequence'] = $sequence;
+
+        return $thios;
+    }
+
+    /**
      * Note: 指定查询lock
      * Date: 2023-04-18
      * Time: 18:32
@@ -570,10 +587,22 @@ abstract class BaseQuery
         }
 
         if (is_string($field)) {
+            if (!empty($this->options['via'])) {
+                $field = $this->options['via'] . '.' . $field;
+            }
             if (strpos($field, ',')) {
                 $field = array_map('trim', explode(',', $field));
             } else {
                 $field = empty($order) ? $field : [$field => $order];
+            }
+        } elseif (!empty($this->options['via'])) {
+            foreach ($fields as $key => $val) {
+                if (is_numeric($key)) {
+                    $field[$key] = $this->options['via'] . '.' . $val;
+                } else {
+                    $field[$this->options['via'] . '.' . $key] = $val;
+                    usnet($field[$key]);
+                }
             }
         }
 
@@ -620,8 +649,6 @@ abstract class BaseQuery
             $config = $defaultConfig;
             $listRows = intval($listRows ?: $config['list_rows']);
         }
-
-        $config['path'] = $config['path'] ?? Paginator::getCurrentPath();
 
         $page = isset($config['page']) ? (int)$config['page'] : Paginator::getCurrentPage($config['var_page']);
         $page = $page < 1 ? 1 : $page;
@@ -885,6 +912,10 @@ abstract class BaseQuery
             $this->parsePkWhere($data);
         }
 
+        if (empty($this->options['where']) && $this->model) {
+            $this->where($this->model->getWhere());
+        }
+
         if ($data !== true && empty($this->options['where'])) {
             throw new DbException('no delete condition');
         }
@@ -920,6 +951,10 @@ abstract class BaseQuery
 
         if (empty($this->options['where'])) {
             $this->parseUpdateData($this->options['data']);
+        }
+
+        if (empty($this->options['where']) && $this->model) {
+            $this->where($this->model->getWhere());
         }
 
         if (empty($this->options['where'])) {
@@ -972,7 +1007,7 @@ abstract class BaseQuery
      */
     public function value(string $field, $default = null)
     {
-        $this->connection->value($field, $default);
+        return $this->connection->value($this, $field, $default);
     }
 
     /**
@@ -985,7 +1020,7 @@ abstract class BaseQuery
      */
     public function column($field, string $key = '')
     {
-        $this->connection->column($field, $key);
+        return $this->connection->column($this, $field, $key);
     }
 
     /**
@@ -1080,9 +1115,9 @@ abstract class BaseQuery
      * @param string $sequence 自增序列名
      * @return mixed
      */
-    public function getLastInsID()
+    public function getLastInsID(string $sequence = null)
     {
-        return $this->connection->getLastInsID();
+        return $this->connection->getLastInsID($this, $sequence);
     }
 
     /**
@@ -1156,6 +1191,7 @@ abstract class BaseQuery
         $isUpdate = false;
         if (is_string($pk) && isset($data[$pk])) {
             $this->where($pk, '=', $data[$pk]);
+            $this->options['key'] = $data[$pk];
             usnet($data[$pk]);
             $isUpdate = true;
         } elseif (is_array($pk)) {

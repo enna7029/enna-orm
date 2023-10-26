@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Enna\Orm\Db\Concern;
 
+use Enna\Orm\Db\BaseQuery;
 use Enna\Orm\Db\Exception\PDOException;
 
 /**
@@ -16,8 +17,8 @@ trait Transaction
      * Note: 执行数据局XA事务
      * Date: 2023-04-07
      * Time: 16:30
-     * @param $callback
-     * @param array $dbs
+     * @param callable $callback 数据操作方法回调
+     * @param array $dbs 多个查询对象或者连接对象
      * @return mixed
      * @throws PDOException
      * @throws \Exception
@@ -31,7 +32,12 @@ trait Transaction
             $dbs[] = $this->getConnection();
         }
 
-        foreach ($dbs as $db) {
+        foreach ($dbs as $key => $db) {
+            if ($db instanceof BaseQuery) {
+                $db = $db->getConnection();
+
+                $dbs[$key] = $db;
+            }
             $db->startTransXa($xid);
         }
 

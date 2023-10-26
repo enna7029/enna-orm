@@ -6,8 +6,13 @@ namespace Enna\Orm\Db;
 use DateTime;
 use DateTimeInterface;
 use DateInterval;
-use http\Exception\InvalidArgumentException;
+use Enna\Orm\Exception\InvalidArgumentException;
 
+/**
+ * 缓存item类
+ * Class CacheItem
+ * @package Enna\Orm\Db
+ */
 class CacheItem
 {
     /**
@@ -161,7 +166,7 @@ class CacheItem
         } elseif ($expire instanceof DateTimeInterface) {
             $this->expire = $expire;
         } elseif (is_numeric($expire) || $expire instanceof DateInterval) {
-            $this->expireAfter($expire);
+            $this->expiresAfter($expire);
         } else {
             throw new InvalidArgumentException('not support datetime');
         }
@@ -176,12 +181,30 @@ class CacheItem
      * @param int|DateInterval $dateInterval 有效期
      * @return $this
      */
-    protected function expireAfter($dateInterval)
+    protected function expiresAfter($dateInterval)
     {
         if ($dateInterval instanceof DateInterval) {
             $this->expire = DateTime::createFromFormat('U', (string)time())->add($dateInterval)->format('U');
         } elseif (is_numeric($dateInterval)) {
             $this->expire = $dateInterval + time();
+        } else {
+            throw new InvalidArgumentException('not support datetime');
+        }
+
+        return $this;
+    }
+
+    /**
+     * Note: 设置缓存项的准确过期时间点
+     * Date: 2023-10-16
+     * Time: 17:02
+     * @param DateTimeInterface $expiration
+     * @return $this
+     */
+    public function expiresAt($expiration)
+    {
+        if ($expiration instanceof DateTimeInterface) {
+            $this->expire = $expiration;
         } else {
             throw new InvalidArgumentException('not support datetime');
         }

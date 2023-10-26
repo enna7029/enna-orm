@@ -22,7 +22,19 @@ trait TableFieldInfo
     }
 
     /**
-     * Note: 获取字段类型信息
+     * Note: 获取详情字段类型信息
+     * Date: 2023-10-24
+     * Time: 14:05
+     * @param string $tableName 数据表名称
+     * @return array
+     */
+    public function getFields(string $tableName = '')
+    {
+        return $this->connection->getFields($tableName ?: $this->getTable());
+    }
+
+    /**
+     * Note: 获取全部字段类型信息
      * Date: 2023-04-28
      * Time: 14:41
      * @return array
@@ -51,7 +63,7 @@ trait TableFieldInfo
     }
 
     /**
-     * Note: 获取字段类型信息
+     * Note: 获取全部字段绑定类型信息
      * Date: 2023-04-28
      * Time: 14:23
      * @return array
@@ -61,5 +73,19 @@ trait TableFieldInfo
         $fieldType = $this->getFieldsType();
 
         return array_map([$this->connection, 'getFieldBindType'], $fieldType);
+    }
+
+    /**
+     * Note: 获取指定字段绑定类型信息
+     * Date: 2023-10-24
+     * Time: 14:09
+     * @param string $field
+     * @return mixed
+     */
+    public function getFieldBindType(string $field)
+    {
+        $fieldType = $this->getFieldType($field);
+
+        return $this->connection->getFieldBindType($fieldType ?: '');
     }
 }

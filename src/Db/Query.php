@@ -7,10 +7,6 @@ use Enna\Framework\Exception;
 
 class Query extends BaseQuery
 {
-    use Concern\JoinAndViewQuery;
-    use Concern\ParamsBind;
-    use Concern\TableFieldInfo;
-
     /**
      * Note: 存储过程调用
      * Date: 2023-03-29
@@ -52,7 +48,7 @@ class Query extends BaseQuery
      */
     public function tableRaw(string $table)
     {
-        $this->options['table'] = $table;
+        $this->options['table'] = new Raw($table);
 
         return $this;
     }
@@ -397,7 +393,9 @@ class Query extends BaseQuery
 
         $this->options['data'] = $data;
 
-        return $this->connection->cursor($this);
+        $connection = $this->connection;
+
+        return $connection->cursor($this);
     }
 
     /**

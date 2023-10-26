@@ -17,6 +17,9 @@
     "autoload": {
         "psr-4":{
             "Enna\\Orm\\":"src"
-        }
+        },
+        "files":[
+            "stubs/load_stubs.php"
+        ]
     }
 }

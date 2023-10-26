@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Enna\Orm\Facade;
+namespace Enna\Orm;
 
 class Facade
 {
@@ -30,7 +30,7 @@ class Facade
      */
     protected static function createFacade(bool $newInstance = false)
     {
-        $class = static::getFacadeClass() ?: 'Enna\Orn\DbManager';
+        $class = static::getFacadeClass() ?: 'Enna\Orm\DbManager';
 
         if (static::$alwaysNewInstance) {
             $newInstance = true;

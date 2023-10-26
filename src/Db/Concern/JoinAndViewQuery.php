@@ -89,7 +89,8 @@ trait JoinAndViewQuery
     {
         if (is_array($join)) {
             $table = $join;
-
+            array_shift($join);
+            $alias = $join;
             return $table;
         } elseif ($join instanceof Raw) {
             return $join;
@@ -134,7 +135,46 @@ trait JoinAndViewQuery
      */
     public function view($join, $field = true, $on = null, string $type = 'INNER', array $bind = [])
     {
+        $this->options['view'] = true;
 
+        $fields = [];
+        $table = $this->getJoinTable($join, $alias);
+
+        if ($field === true) {
+            $fields = $alias . '.*';
+        } else {
+            if (is_string($field)) {
+                $field = explode(',', $field);
+            }
+
+            foreach ($field as $key => $value) {
+                if (is_numeric($key)) {
+                    $fields[] = $alias . '.' . $value;
+
+                    $this->options['map'][$value] = $alias . '.' . $value;
+                } else {
+                    if (preg_match('/[,=\.\'\"\(\s]/', $key)) {
+                        $name = $key;
+                    } else {
+                        $name = $alias . '.' . $key;
+                    }
+
+                    $fields[] = $name . ' AS ' . $value;
+
+                    $this->options['map'][$value] = $name;
+                }
+            }
+        }
+
+        $this->field($field);
+
+        if ($on) {
+            $this->join($table, $on, $type, $bind);
+        } else {
+            $this->table($table);
+        }
+
+        return $this;
     }
 
     /**
@@ -146,6 +186,37 @@ trait JoinAndViewQuery
      */
     public function parseView(array &$options)
     {
+        foreach (['AND', 'OR'] as $logic) {
+            if (isset($options['where'][$logic])) {
+                foreach ($options['where'][$logic] as $key => $value) {
+                    if (array_key_exists($value[0], $options['map'])) {
+                        array_shift($value);
+                        array_unshift($value, $options['map'][$value[0]]);
+                        $options['where'][$logic][] = $value;
+                        unset($options['where'][$logic][$key]);
+                    }
+                }
+            }
+        }
 
+        if (isset($options['order'])) {
+            foreach ($options['order'] as $key => $value) {
+                if (is_numeric($key) && is_string($value)) {
+                    if (strpos($value, ' ')) {
+                        [$field, $sort] = explode(' ', $value);
+                        if (array_key_exists($field, $options['map'])) {
+                            $options['order'][$options['map'][$field]] = $sort;
+                            unset($options['order'][$key]);
+                        }
+                    } elseif (array_key_exists($value, $options['map'])) {
+                        $options['order'][$options['map'][$field]] = 'asc';
+                        unset($options['order'][$key]);
+                    }
+                } elseif (array_key_exists($key, $options['map'])) {
+                    $options['order'][$options['map'][$key]] = $value;
+                    unset($options['order'][$key]);
+                }
+            }
+        }
     }
 }

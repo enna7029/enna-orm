@@ -31,7 +31,7 @@ trait WhereQuery
             $this->parseQueryWhere($field);
             return $this;
         } elseif ($field === true || $field === 1) {
-            $this->options['where']['and'][] = true;
+            $this->options['where']['AND'][] = true;
             return $this;
         }
 
@@ -52,6 +52,18 @@ trait WhereQuery
     {
         $this->options['where'] = $query->getOptions('where');
 
+        if ($query->getOptions('via')) {
+            $via = $query->getOptions('via');
+            foreach ($this->options['where'] as $logic => &$where) {
+                foreach ($where as $key => &$value) {
+                    if (is_array($value) && !strpos($value[0], ',')) {
+                        $value[0] = $via . '.' . $value[0];
+                    }
+                }
+            }
+        }
+
+        $this->bind($query->getBind(false));
     }
 
     /**
