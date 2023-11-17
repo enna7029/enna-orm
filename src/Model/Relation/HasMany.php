@@ -144,6 +144,7 @@ class HasMany extends Relation
         $this->query->removeWhereField($foreignKey);
 
         if ($closure) {
+            $this->baseQuery = true;
             $closure($this->getClosureType($closure));
         }
 
@@ -289,8 +290,8 @@ class HasMany extends Relation
             $closure($this->getClosureType($closure), $name);
         }
 
-        return $this->query
-            ->whereExp($this->foreignKey, '=', $this->parent->getTable() . '.' . $this->localKey)
+        return $this->query->alias($aggreate . '_table')
+            ->whereExp($aggreate . '_table' . $this->foreignKey, '=', $this->parent->getTable() . '.' . $this->localKey)
             ->fetchSql()
             ->$aggreate($field);
     }

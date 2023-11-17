@@ -62,6 +62,8 @@ class HasOne extends OneToOne
             }
 
             $relationModel->setParent(clone $this->parent);
+        } else {
+            $relationModel = $this->getDefaultModel();
         }
 
         return $relationModel;
@@ -142,7 +144,7 @@ class HasOne extends OneToOne
         return $query->whereExists(function ($query) use ($table, $model, $relation, $localKey, $foreignKey, $softDelete, $defaultSoftDelete) {
             $query->table([$table => $relation])
                 ->field($relation . '.' . $foreignKey)
-                ->whereExp()
+                ->whereExp($model . '.' . $localKey, '=' . $relation . '.' . $foreignKey)
                 ->when($softDelete, function ($query) use ($softDelete, $relation, $defaultSoftDelete) {
                     $query->where($relation . strstr($softDelete[0], '.'), '=' == $softDelete[1][0] ? $softDelete[1][1] : $defaultSoftDelete);
                 });
@@ -219,17 +221,18 @@ class HasOne extends OneToOne
 
             foreach ($resultSet as $result) {
                 if (!isset($data[$result->$localKey])) {
-                    $relationModel = null;
+                    $relationModel = $this->getDefaultModel();
                 } else {
                     $relationModel = $data[$result->$localKey];
                     $relationModel->setParent(clone $result);
                     $relationModel->exists(true);
                 }
 
+                $result->setRelation($relation, $relationModel);
+
                 if (!empty($this->bindAttr)) {
                     $this->bindAttr($result, $relationModel);
-                } else {
-                    $result->setRelation($relation, $relationModel);
+                    $result->hidden([$relation], true);
                 }
             }
         }
@@ -258,17 +261,18 @@ class HasOne extends OneToOne
         ], $foreignKey, $subRelation, $closure, $cache);
 
         if (!isset($data[$result->$localKey])) {
-            $relationModel = null;
+            $relationModel = $this->getDefaultModel();
         } else {
             $relationModel = $data[$result->$localKey];
             $relationModel->setParent(clone $result);
             $relationModel->exists(true);
         }
 
+        $result->setRelation($relation, $relationModel);
+
         if (!empty($this->bindAttr)) {
             $this->bindAttr($result, $relationModel);
-        } else {
-            $result->setRelation($relation, $relationModel);
+            $result->hidden([$relation], true);
         }
     }
 

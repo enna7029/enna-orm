@@ -5,6 +5,11 @@ namespace Enna\Orm\Model\Concern;
 
 use DateTime;
 
+/**
+ * 自动时间戳
+ * Trait TimeStamp
+ * @package Enna\Orm\Model\Concern
+ */
 trait TimeStamp
 {
     /**

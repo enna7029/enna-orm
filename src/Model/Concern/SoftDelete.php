@@ -19,6 +19,21 @@ trait SoftDelete
     protected $withTrashed = false;
 
     /**
+     * Note: 覆盖被父类的方法
+     * Date: 2023-11-10
+     * Time: 14:44
+     * @param array $scope 设置不使用的全局查询范围
+     * @return mixed
+     */
+    public function db($scope = [])
+    {
+        $query = parent::db($scope);
+        $this->withNoTrashed($query);
+
+        return $query;
+    }
+
+    /**
      * Note: 判断当前实例是否被软删除
      * Date: 2023-05-17
      * Time: 9:55
@@ -62,21 +77,7 @@ trait SoftDelete
     {
         $model = new static();
 
-        return $model->withTrashedData(true)->db();
-    }
-
-    /**
-     * Note: 是否包含软删除数据
-     * Date: 2023-05-17
-     * Time: 9:59
-     * @param bool $withTrashed 是否包含软删除数据
-     * @return $this
-     */
-    public function withTrashedData(bool $withTrashed)
-    {
-        $this->withTrashed = $withTrashed;
-
-        return $this;
+        return $model->db()->removeOption('soft_delete');
     }
 
     /**

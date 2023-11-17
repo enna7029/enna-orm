@@ -6,6 +6,11 @@ namespace Enna\Orm\Model\Concern;
 use Enna\Framework\Helper\Str;
 use Enna\Orm\Db\Exception\ModelEventException;
 
+/**
+ * 模型事件处理
+ * Trait ModelEvent
+ * @package Enna\Orm\Model\Concern
+ */
 trait ModelEvent
 {
     /**
@@ -65,7 +70,7 @@ trait ModelEvent
             if (method_exists(static::class, $method)) {
                 $result = call_user_func([static::class, $method], $this);
             } elseif (is_object(self::$event) && method_exists(self::$event, 'trigger')) {
-                $result = self::$event->trigger(static::class . '.' . $event, $this);
+                $result = self::$event->trigger('model.' . static::class . '.' . $event, $this);
                 $result = empty($result) ? true : end($result);
             } else {
                 $result = true;

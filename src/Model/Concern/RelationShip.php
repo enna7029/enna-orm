@@ -22,6 +22,11 @@ use Enna\Orm\Model\Relation\MorphMany;
 use Enna\Orm\Model\Relation\MorphTo;
 use Enna\Orm\Model\Relation\MorphToMany;
 
+/**
+ * 模型关联处理
+ * Trait RelationShip
+ * @package Enna\Orm\Model\Concern
+ */
 trait RelationShip
 {
     /**
@@ -112,7 +117,7 @@ trait RelationShip
             $value = $this->$method($value, array_merge($this->data, $data));
         }
 
-        $this->relation[$name] = $value;
+        $this->relation[$this->getRealFieldName($name)] = $value;
 
         return $this;
     }
@@ -144,14 +149,32 @@ trait RelationShip
             }
 
             $method = Str::camel($relation);
+            $relationName = Str::snake($relation);
+
             $resultResult = $this->$method();
 
-            if (isset($withRelationAttr[$relation])) {
-                $resultResult->withAttr($withRelationAttr[$relation]);
+            if (isset($withRelationAttr[$relationName])) {
+                $resultResult->withAttr($withRelationAttr[$relationName]);
             }
 
             $this->relation[$relation] = $resultResult->getRelation((array)$subRelation, $closure);
         }
+    }
+
+    /**
+     * Note: 关联数据写入
+     * Date: 2023-05-25
+     * Time: 10:21
+     * @param array $relation 关联模型名
+     * @return $this
+     */
+    public function together(array $relation)
+    {
+        $this->together = $relation;
+
+        $this->checkAutoRelationWrite();
+
+        return $this;
     }
 
     /**
@@ -168,7 +191,9 @@ trait RelationShip
      */
     public static function has(string $relation, string $operator = '>=', int $count = 1, string $id = '*', string $joinType = '', Query $query = null)
     {
-        return (new static())->$relation()->has($operator, $count, $id, $joinType, $query);
+        return (new static())
+            ->$relation()
+            ->has($operator, $count, $id, $joinType, $query);
     }
 
     /**
@@ -184,7 +209,9 @@ trait RelationShip
      */
     public static function hasWhere(string $relation, $where = [], string $fields = '*', string $joinType = '', Query $query = null)
     {
-        return (new static())->$relation()->hasWhere($where, $fields, $joinType, $query);
+        return (new static())
+            ->$relation()
+            ->hasWhere($where, $fields, $joinType, $query);
     }
 
     /**
@@ -235,7 +262,7 @@ trait RelationShip
             }
 
             if (is_array($relation)) {
-                $subRelation = $resultSet;
+                $subRelation = $relation;
                 $relation = $key;
             } elseif (strpos($relation, '.')) {
                 [$relation, $subRelation] = explode('.', $relation, 2);
@@ -336,22 +363,6 @@ trait RelationShip
     }
 
     /**
-     * Note: 关联数据写入
-     * Date: 2023-05-25
-     * Time: 10:21
-     * @param array $relation 关联模型名
-     * @return $this
-     */
-    public function together(array $relation)
-    {
-        $this->together = $relation;
-
-        $this->checkAutoRelationWrite();
-
-        return $this;
-    }
-
-    /**
      * Note: 关联统计
      * Date: 2023-05-26
      * Time: 9:58
@@ -426,8 +437,8 @@ trait RelationShip
     public function belongsTo(string $model, string $foreignKey = '', string $localKey = '')
     {
         $model = $this->parseModel($model);
-        $foreignKey = $foreignKey ?: $this->getForeignKey($this->name);
-        $localKey = $localKey ?: $this->getPk();
+        $foreignKey = $foreignKey ?: $this->getForeignKey((new $model)->getName());
+        $localKey = $localKey ?: (new $model)->getPk();
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
         $relation = Str::snake($trace[1]['function']);
 
@@ -469,11 +480,12 @@ trait RelationShip
         $model = $this->parseModel($model);
         $through = $this->parseModel($through);
 
-        $localKey = $localKey ?: $this->getPk();
         $forgienKey = $forgienKey ?: $this->getForeignKey($this->name);
-
-        $throughPk = $through ?: (new $through)->getPk();
         $throughKey = $throughKey ?: $this->getForeignKey((new $through)->getName());
+
+        $localKey = $localKey ?: $this->getPk();
+        $throughPk = $through ?: (new $through)->getPk();
+
 
         return new HasManyThrough($this, $model, $through, $forgienKey, $throughKey, $localKey, $throughPk);
     }
@@ -495,11 +507,11 @@ trait RelationShip
         $model = $this->parseModel($model);
         $through = $this->parseModel($through);
 
-        $localKey = $localKey ?: $this->getPk();
         $forgienKey = $forgienKey ?: $this->getForeignKey($this->name);
-
-        $throughPk = $through ?: (new $through)->getPk();
         $throughKey = $throughKey ?: $this->getForeignKey((new $through)->getName());
+
+        $localKey = $localKey ?: $this->getPk();
+        $throughPk = $through ?: (new $through)->getPk();
 
         return new HasOneThrough($this, $model, $through, $forgienKey, $throughKey, $localKey, $throughPk);
     }
@@ -524,7 +536,7 @@ trait RelationShip
         $foreignKey = $foreignKey ?: $name . '_id';
         $localKey = $localKey ?: $this->getForeignKey($this->name);
 
-        return new BelongsToMany($this, $mode, $middle, $foreignKey, $localKey);
+        return new BelongsToMany($this, $model, $middle, $foreignKey, $localKey);
     }
 
     /**
@@ -736,7 +748,9 @@ trait RelationShip
      */
     protected function getRelationData(Relation $modelRelation)
     {
-        if ($this->parent && !$modelRelation->isSelfRelation() && get_class($this->parent) == get_class($modelRelation->getModel())) {
+        if ($this->parent && !$modelRelation->isSelfRelation()
+            && get_class($this->parent) == get_class($modelRelation->getModel())
+            && $modelRelation instanceof OneToOne) {
             return $this->parent;
         }
 
@@ -753,11 +767,15 @@ trait RelationShip
     {
         foreach ($this->together as $key => $name) {
             if (is_array($name)) {
-                $this->relationWrite[$key] = [];
-                foreach ($name as $val) {
-                    if (isset($this->data[$val])) {
-                        $this->relationWrite[$key][$val] = $this->data[$val];
+                if (key($name) === 0) {
+                    $this->relationWrite[$key] = [];
+                    foreach ($name as $val) {
+                        if (isset($this->data[$val])) {
+                            $this->relationWrite[$key][$val] = $this->data[$val];
+                        }
                     }
+                } else {
+                    $this->relationWrite[$key] = $name;
                 }
             } elseif (isset($this->relation[$name])) {
                 $this->relationWrite[$name] = $this->relation[$name];
@@ -769,7 +787,7 @@ trait RelationShip
     }
 
     /**
-     * Note: 自动关联数据更新
+     * Note: 自动关联数据更新(支持一对一关联)
      * Date: 2023-06-08
      * Time: 11:09
      * @return void
@@ -790,7 +808,7 @@ trait RelationShip
     }
 
     /**
-     * Note: 自动关联数据写入
+     * Note: 自动关联数据写入(支持一对一关联)
      * Date: 2023-06-08
      * Time: 11:20
      * @return void
@@ -804,7 +822,7 @@ trait RelationShip
     }
 
     /**
-     * Note: 自动关联数据删除
+     * Note: 自动关联数据删除(支持一对一,一对多关联)
      * Date: 2023-06-08
      * Time: 15:43
      * @param bool $force 强删除

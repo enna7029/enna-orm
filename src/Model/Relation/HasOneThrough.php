@@ -70,7 +70,7 @@ class HasOneThrough extends HasManyThrough
 
             foreach ($resultSet as $result) {
                 if (!isset($data[$result->$localKey])) {
-                    $relationModel = null;
+                    $relationModel = $this->getDefaultModel();
                 } else {
                     $relationModel = $data[$result->$localKey];
                     $relationModel->setParent(clone $result);
@@ -105,7 +105,7 @@ class HasOneThrough extends HasManyThrough
         ], $foreignKey, $subRelation, $closure, $cache);
 
         if (!isset($data[$result->$localKey])) {
-            $relationModel = null;
+            $relationModel = $this->getDefaultModel();
         } else {
             $relationModel = $data[$result->$localKey];
             $relationModel->setParent(clone $result);

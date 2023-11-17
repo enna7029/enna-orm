@@ -40,4 +40,23 @@ class Pivot extends Model
 
         parent::__construct($data);
     }
+
+    /**
+     * Note: 创建新的模型实例
+     * Date: 2023-11-14
+     * Time: 17:38
+     * @param array $data 数据
+     * @param mixed $where 更新条件
+     * @param array $options 参数
+     * @return Pivot
+     */
+    public function newInstance(array $data = [], $where = null, array $options = [])
+    {
+        $model = parent::newInstance($data, $where, $options);
+
+        $model->parent = $this->parent;
+        $model->name = $this->name;
+
+        return $model;
+    }
 }

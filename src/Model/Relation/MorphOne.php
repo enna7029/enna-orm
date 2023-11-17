@@ -82,6 +82,8 @@ class MorphOne extends Relation
             }
 
             $relationModel->setParent(clone $this->parent);
+        } else {
+            $relationModel = $this->getDefaultModel();
         }
 
         return $relationModel;
@@ -152,7 +154,7 @@ class MorphOne extends Relation
             foreach ($resultSet as $result) {
                 $pk = $result->getPk();
                 if (!isset($data[$result->$pk])) {
-                    $relationModel = null;
+                    $relationModel = $this->getDefaultModel();
                 } else {
                     $relationModel = $data[$result->$pk];
                     $relationModel->setParent(clone $result);
@@ -193,7 +195,7 @@ class MorphOne extends Relation
             ], $subRelation, $closure, $cache);
 
             if (!isset($data[$key])) {
-                $relationModel = null;
+                $relationModel = $this->getDefaultModel();
             } else {
                 $relationModel = $data[$key];
                 $relationModel->setParent(clone $result);

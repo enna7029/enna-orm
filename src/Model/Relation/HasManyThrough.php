@@ -159,8 +159,8 @@ class HasManyThrough extends Relation
         $query = $query ?: $this->parent->db()->alias($parent);
         $defaultSoftDelete = (new $this->parent)->defaultSoftDelete ?: null;
 
-        return $query->join($throughTable, $throughTable . '.' . $this->foreignKey . '=' . $model . '.' . $this->localKey)
-            ->join($modelTable, $modelTable . '.' . $throughKey . '=' . $throughTable . '.' . $this->throughPk)
+        return $query->join($throughTable, $throughTable . '.' . $this->foreignKey . '=' . $parent . '.' . $this->localKey)
+            ->join($modelTable, $modelTable . '.' . $throughKey . '=' . $throughTable . '.' . $this->throughPk, $joinType)
             ->when($softDelete, function ($query) use ($softDelete, $modelTable, $defaultSoftDelete) {
                 $query->where($modelTable . strstr($softDelete[0], '.'), '=' == $softDelete[1][0] ? $softDelete[1][1] : $defaultSoftDelete);
             })
@@ -254,15 +254,20 @@ class HasManyThrough extends Relation
     protected function withWhere(array $where, string $key, array $subRelation = [], Closure $closure = null, array $cache = [])
     {
         $throughList = $this->through->where($where)->select();
-        $keys = $throughList->column($this->throughKey, $this->throughKey);
+        $keys = $throughList->column($this->throughPk, $this->throughPk);
 
         if ($closure) {
             $this->baseQuery = true;
             $closure($this->getClosureType($closure));
         }
 
+        $throughKey = $this->throughKey;
+        if ($this->baseQuery) {
+            $throughKey = Str::snake(class_basename($this->model)) . '.' . $this->throughKey;
+        }
+
         $list = $this->query
-            ->where($this->throughKey, 'in', $keys)
+            ->where($throughKey, 'in', $keys)
             ->cache($cache[0] ?? null, $cache[1] ?? null, $cache[2] ?? null)
             ->select();
 
@@ -387,7 +392,7 @@ class HasManyThrough extends Relation
                 ->field($fields)
                 ->alias($alias)
                 ->join($throughTable, $throughTable . '.' . $throughPk . '=' . $alias . '.' . $throughKey)
-                ->join($parentTable, $parentTable . '.' . $this->localKey . '=' . $throughKey . '.' . $this->foreignKey)
+                ->join($parentTable, $parentTable . '.' . $this->localKey . '=' . $throughTable . '.' . $this->foreignKey)
                 ->where($throughTable . '.' . $this->foreignKey, '=', $this->parent->{$this->localKey});
 
             $this->baseQuery = true;

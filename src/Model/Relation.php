@@ -75,6 +75,12 @@ abstract class Relation
     protected $withoutField;
 
     /**
+     * 默认数据
+     * @var mixed
+     */
+    protected $default;
+
+    /**
      * Note: 获取关联的所属模型
      * Date: 2023-06-07
      * Time: 18:04
@@ -184,6 +190,41 @@ abstract class Relation
         $this->withoutField = $field;
 
         return $this;
+    }
+
+    /**
+     * Note: 设置关联数据不存在的时候默认值
+     * Date: 2023-11-11
+     * Time: 16:24
+     * @param mixed $data 默认值
+     * @return $this
+     */
+    public function withDefault($data = null)
+    {
+        $this->default = $data;
+
+        return $this;
+    }
+
+    /**
+     * Note: 获取关联模型的默认值
+     * Date: 2023-11-11
+     * Time: 16:27
+     * @return mixed
+     */
+    protected function getDefaultModel()
+    {
+        if (is_array($this->default)) {
+            $model = (new $this->model)->data($this->default);
+        } elseif ($this->default instanceof \Closure) {
+            $closure = $this->default;
+            $model = new $this->model;
+            $closure($model);
+        } else {
+            $model = $this->default;
+        }
+
+        return $model;
     }
 
     /**

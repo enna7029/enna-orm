@@ -322,6 +322,39 @@ class MorphMany extends Relation
     }
 
     /**
+     * Note: 获取多态关联外键
+     * Date: 2023-11-17
+     * Time: 14:20
+     * @return string
+     */
+    public function getMorphKey()
+    {
+        return $this->morphKey;
+    }
+
+    /**
+     * Note: 获取多态字段名
+     * Date: 2023-11-17
+     * Time: 14:21
+     * @return string
+     */
+    public function getMorphType()
+    {
+        return $this->morphType;
+    }
+
+    /**
+     * Note: 获取多态类型
+     * Date: 2023-11-17
+     * Time: 14:22
+     * @return string
+     */
+    public function getType()
+    {
+        return $this->type;
+    }
+
+    /**
      * Note: 执行基础查询(仅执行一次)
      * Date: 2023-06-17
      * Time: 17:01

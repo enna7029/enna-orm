@@ -62,11 +62,14 @@ trait Conversion
      * Note: 输出时转换为驼峰
      * Date: 2023-05-20
      * Time: 14:41
-     * @param bool $toCamel
+     * @param bool $toCamel 是否自动驼峰命名
+     * @return $this
      */
     public function convertNameToCamel(bool $toCamel = true)
     {
         $this->convertNameToCamel = $toCamel;
+
+        return $this;
     }
 
     /**
@@ -74,11 +77,16 @@ trait Conversion
      * Date: 2023-05-20
      * Time: 14:41
      * @param array $hidden 属性列表
+     * @param bool $merge 是否合并
      * @return $this
      */
-    public function hidden(array $hidden = [])
+    public function hidden(array $hidden = [], bool $merge = false)
     {
-        $this->hidden = $hidden;
+        if ($merge) {
+            $this->hidden = array_merge($this->hidden, $hidden);
+        } else {
+            $this->hidden = $hidden;
+        }
 
         return $this;
     }
@@ -88,11 +96,16 @@ trait Conversion
      * Date: 2023-05-20
      * Time: 15:30
      * @param array $visible 属性列表
+     * @param bool $merge 是否合并
      * @return $this
      */
-    public function visible(array $visible = [])
+    public function visible(array $visible = [], bool $merge = false)
     {
-        $this->visible = $visible;
+        if ($merge) {
+            $this->visible = array_merge($this->visible, $visible);
+        } else {
+            $this->visible = $visible;
+        }
 
         return $this;
     }
@@ -102,11 +115,16 @@ trait Conversion
      * Date: 2023-05-20
      * Time: 15:31
      * @param array $append 属性列表
+     * @param bool $merge 是否合并
      * @return $this
      */
-    public function append(array $append = [])
+    public function append(array $append = [], bool $merge = false)
     {
-        $this->append = $append;
+        if ($merge) {
+            $this->append = array_merge($this->append, $append);
+        } else {
+            $this->append = $append;
+        }
 
         return $this;
     }
@@ -133,6 +151,20 @@ trait Conversion
     }
 
     /**
+     * Note: 设置属性的映射输出
+     * Date: 2023-11-09
+     * Time: 18:08
+     * @param array $map
+     * @return $this
+     */
+    public function mapping(array $map)
+    {
+        $this->mapping = $map;
+
+        return $this;
+    }
+
+    /**
      * Note: 设置附加关联对象的属性
      * Date: 2023-05-20
      * Time: 16:46
@@ -143,6 +175,25 @@ trait Conversion
      */
     public function appendRelationAttr(string $attr, array $append)
     {
+        $relation = Str::camel($attr);
+
+        if (isset($this->relation[$relation])) {
+            $model = $this->relation[$relation];
+        } else {
+            $model = $this->getRelationData($this->$relation());
+        }
+
+        if ($model instanceof Model) {
+            foreach ($append as $key => $attr) {
+                $key = is_numeric($key) ? $attr : $key;
+                if (isset($this->data[$key])) {
+                    throw new DbException('bind attr has exists:' . $key);
+                }
+
+                $this->data[$key] = $model->$attr;
+            }
+        }
+
         return $this;
     }
 
@@ -154,50 +205,55 @@ trait Conversion
      */
     public function toArray(): array
     {
-        $item = [];
-
+        $item = $visible = $hidden = [];
         $hasVisible = false;
+
+        //显示属性数据
         foreach ($this->visible as $key => $val) {
             if (is_string($val)) {
                 if (strpos($val, '.')) {
                     [$relation, $name] = explode('.', $val);
-                    $this->visible[$relation][] = $name;
+                    $visible[$relation][] = $name;
                 } else {
-                    $this->visible[$val] = true;
+                    $visible[$val] = true;
                     $hasVisible = true;
                 }
-                unset($this->visible[$key]);
             }
         }
 
+        //隐藏属性数据
         foreach ($this->hidden as $key => $val) {
             if (is_string($val)) {
                 if (strpos($val, '.')) {
                     [$relation, $name] = explode('.', $val);
-                    $this->hidden[$relation][] = $name;
+                    $hidden[$relation][] = $name;
                 } else {
-                    $this->hidden[$val] = true;
+                    $hidden[$val] = true;
                 }
-                unset($this->hidden[$key]);
             }
+        }
+
+        //追加属性
+        foreach ($this->append as $key => $name) {
+            $this->appendAttrToArray($item, $key, $name, $visible, $hidden);
         }
 
         $data = array_merge($this->data, $this->relation);
 
         foreach ($this->data as $key => $val) {
             if ($val instanceof Model || $val instanceof ModelCollection) {
-                if (isset($this->visible[$key]) && is_array($this->visible[$key])) {
+                if (isset($visible[$key]) && is_array($visible[$key])) {
                     $val->visible($this->visible[$key]);
-                } elseif (isset($this->hidden[$key]) && $is_array($this->hidden[$key])) {
-                    $val->hidden($this->hidden[$key]);
+                } elseif (isset($hidden[$key]) && is_array($hidden[$key])) {
+                    $val->hidden($this->hidden[$key], true);
                 }
 
-                if (!isset($this->hidden[$key]) || $this->hidden[$key] !== true) {
+                if (!isset($hidden[$key]) || $hidden[$key] !== true) {
                     $item[$key] = $val->toArray();
                 }
-            } elseif (isset($this->visible[$key])) {
+            } elseif (isset($visible[$key])) {
                 $item[$key] = $this->getAttr($key);
-            } elseif (!isset($this->hidden[$key]) && !$hasVisible) {
+            } elseif (!isset($hidden[$key]) && !$hasVisible) {
                 $item[$key] = $this->getAttr($key);
             }
 
@@ -206,10 +262,6 @@ trait Conversion
                 $item[$mapName] = $item[$key];
                 unset($item[$key]);
             }
-        }
-
-        foreach ($this->append as $key => $name) {
-            $this->appendAttrToArray($item, $key, $name);
         }
 
         if ($this->convertNameToCamel) {
@@ -232,17 +284,20 @@ trait Conversion
      * @param array $item 数据
      * @param string|int $key 关联属性名|键
      * @param string|array $name 关联属性的属性
+     * @param array $visible 显示属性
+     * @param array $hidden 隐藏属性
      * @return void
      */
-    protected function appendAttrToArray(array &$item, $key, $name)
+    protected function appendAttrToArray(array &$item, $key, $name, $visible, $hidden)
     {
         if (is_array($name)) {
-            $relation = $this->getRelation($key, true);
+            $relation = $this->getRelationWith($key, $hidden, $visible);
 
             $item[$name] = $relation ? $relation->append($name)->toArray() : [];
         } elseif (strpos($name, '.')) {
             [$key, $attr] = explode('.', $name);
-            $relation = $this->getRelation($key, true);
+
+            $relation = $this->getRelationWith($key, $hidden, $visible);
 
             $item[$name] = $relation ? $relation->append([$attr])->toArray() : [];
         } else {
@@ -251,6 +306,29 @@ trait Conversion
 
             $this->getBindAttrValue($name, $value, $item);
         }
+    }
+
+    /**
+     * Note: 获取关联对象
+     * Date: 2023-11-09
+     * Time: 18:54
+     * @param string $key 关联对象名
+     * @param array $hidden 隐藏属性
+     * @param array $visible 显示属性
+     * @return Model
+     */
+    protected function getRelationWith(string $key, array $hidden, array $visible)
+    {
+        $relation = $this->getRelation($key, true);
+        if ($relation) {
+            if (isset($visible[$key])) {
+                $relation->visible($visible[$key]);
+            } elseif (isset($hidden[$key])) {
+                $relation->hidden($hidden[$key]);
+            }
+        }
+
+        return $relation;
     }
 
     /**
@@ -284,7 +362,7 @@ trait Conversion
                     throw new DbException('bind attr has exists:' . $key);
                 }
 
-                $item[$key] = $value ? $value->getAttr($value) : $null;
+                $item[$key] = $value ? $value->getAttr($value) : null;
             }
         }
     }
@@ -301,6 +379,7 @@ trait Conversion
         return json_encode($this->toArray(), $options);
     }
 
+    // JsonSerializable
     public function jsonSerialize()
     {
         $this->toArray();
@@ -311,6 +390,7 @@ trait Conversion
      * Date: 2023-05-22
      * Time: 11:58
      * @param array|Collection $collection 数据集
+     * @param strin $resultSetType 数据集类
      * @return Collection
      */
     public function toCollection($collection, string $resultSetType = null)

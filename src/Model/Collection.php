@@ -156,7 +156,7 @@ class Collection extends BaseCollection
     public function withAttr($name, callable $callback)
     {
         $this->each(function (Model $model) use ($name, $callback) {
-            $model->withAttribute($name, $callback);
+            $model->withAttr($name, $callback);
         });
 
         return $this;

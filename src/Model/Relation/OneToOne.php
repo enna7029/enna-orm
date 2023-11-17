@@ -76,6 +76,29 @@ abstract class OneToOne extends Relation
     }
 
     /**
+     * Note: 绑定关联属性到父模型
+     * Date: 2023-05-26
+     * Time: 17:54
+     * @param Model $parent 父模型对象
+     * @param Model $model 关联模型对象
+     * @return void
+     * @throws DbException
+     */
+    protected function bindAttr(Model $parent, Model $model)
+    {
+        foreach ($this->bindAttr as $key => $attr) {
+            $key = is_numeric($key) ? $attr : $key;
+            $value = $parent->getOrigin($key);
+
+            if (!is_null($value)) {
+                throw new DbException('bind attr has exists:' . $key);
+            }
+
+            $parent->setAttr($key, $model ? $model->$attr : null);
+        }
+    }
+
+    /**
      * Note: 预载入关联查询:JOIN方式
      * Date: 2023-05-24
      * Time: 14:16
@@ -127,29 +150,6 @@ abstract class OneToOne extends Relation
 
         $query->join([$joinTable => $joinAlias], $joinOn, $joinType)
             ->tableField($field, $joinTable, $joinAlias, $relation . '__');
-    }
-
-    /**
-     * Note: 绑定关联属性到父模型
-     * Date: 2023-05-26
-     * Time: 17:54
-     * @param Model $parent 父模型对象
-     * @param Model $model 关联模型对象
-     * @return void
-     * @throws DbException
-     */
-    protected function bindAttr(Model $parent, Model $model)
-    {
-        foreach ($this->bindAttr as $key => $attr) {
-            $key = is_numeric($key) ? $attr : $key;
-            $value = $parent->getOrigin($key);
-
-            if (!is_null($value)) {
-                throw new DbException('bind attr has exists:' . $key);
-            }
-
-            $parent->setAttr($key, $model ? $model->$attr : null);
-        }
     }
 
     /**

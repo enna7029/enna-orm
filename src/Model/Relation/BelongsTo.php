@@ -64,6 +64,8 @@ class BelongsTo extends OneToOne
             }
 
             $relationModel->setParent(clone $this->parent);
+        } else {
+            $relationModel = $this->getDefaultModel();
         }
 
         return $relationModel;
@@ -144,7 +146,7 @@ class BelongsTo extends OneToOne
         return $query->whereExists(function ($query) use ($table, $model, $relation, $localKey, $foreignKey, $softDelete, $defaultSoftDelete) {
             $query->table([$table => $relation])
                 ->field($relation . '.' . $foreignKey)
-                ->whereExp()
+                ->whereExp($model . '.' . $foreignKey, '=' . $relation . '.' . $localKey)
                 ->when($softDelete, function ($query) use ($softDelete, $relation, $defaultSoftDelete) {
                     $query->where($relation . strstr($softDelete[0], '.'), '=' == $softDelete[1][0] ? $softDelete[1][1] : $defaultSoftDelete);
                 });
@@ -182,7 +184,7 @@ class BelongsTo extends OneToOne
         $defaultSoftDelete = (new $this->model)->defaultSoftDelete ?: null;
 
         return $query->field($fields)
-            ->join([$table => $relation], $model . '.' . $this->localKey . '=' . $relation . '.' . $this->foreignKey, $joinType ?: $this->joinType)
+            ->join([$table => $relation], $model . '.' . $this->foreignKey . '=' . $relation . '.' . $this->localKey, $joinType ?: $this->joinType)
             ->when($softDelete, function ($query) use ($softDelete, $relation, $defaultSoftDelete) {
                 $query->where($relation . strstr($softDelete[0], '.'), '=' == $softDelete[1][0] ? $softDelete[1][1] : $defaultSoftDelete);
             })
@@ -221,17 +223,18 @@ class BelongsTo extends OneToOne
 
             foreach ($resultSet as $result) {
                 if (!isset($data[$result->$foreigenKey])) {
-                    $relationModel = null;
+                    $relationModel = $this->getDefaultModel();
                 } else {
                     $relationModel = $data[$result->$foreigenKey];
-                    $relationModel = setParent(clone $result);
+                    $relationModel->setParent(clone $result);
                     $relationModel->exists(true);
                 }
 
+                $result->setRelation($relation, $relationModel);
+
                 if (!empty($this->bindAttr)) {
                     $this->bindAttr($result, $relationModel);
-                } else {
-                    $result->setRelation($relation, $relationModel);
+                    $result->hidden([$relation], true);
                 }
             }
         }
@@ -260,18 +263,48 @@ class BelongsTo extends OneToOne
         ], $localKey, $subRelation, $closure, $cache);
 
         if (!isset($data[$result->$foreignKey])) {
-            $relationModel = null;
+            $relationModel = $this->getDefaultModel();
         } else {
             $relationModel = $data[$result->$foreignKey];
             $relationModel->setParent(clone $result);
             $relationModel->exists(true);
         }
 
+        $result->setRelation($relation, $relationModel);
+
         if (!empty($this->bindAttr)) {
             $this->bindAttr($result, $relationModel);
-        } else {
-            $this->setRelation($relation, $relationModel);
+            $result->hidden([$relation], true);
         }
+    }
+
+    /**
+     * Note: 添加关联数据
+     * Date: 2023-11-13
+     * Time: 18:37
+     * @param Model $model 关联模型对象
+     * @return Model
+     */
+    public function associate(Model $model)
+    {
+        $this->parent->setAttr($this->foreignKey, $model->getKey());
+        $this->parent->save();
+
+        return $this->parent->setRelation($this->relation, $model);
+    }
+
+    /**
+     * Note: 注销关联数据
+     * Date: 2023-11-13
+     * Time: 18:38
+     * @return Model
+     */
+    public function dissociate()
+    {
+        $this->parent->setAttr($this->foreignKey, null);
+        $this->parent->save();
+
+        return $this->parent->setRelation($this->relation, null);
     }
 
     /**

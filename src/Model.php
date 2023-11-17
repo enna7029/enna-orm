@@ -1,17 +1,32 @@
 <?php
-declare (strict_types = 1);
+declare (strict_types=1);
 
 namespace Enna\Orm;
 
 use Closure;
 use Enna\Orm\Model\Collection;
-use http\Params;
 use JsonSerializable;
 use ArrayAccess;
 use Enna\Orm\Contract\Arrayable;
 use Enna\Orm\Contract\Jsonable;
 use Enna\Orm\Db\BaseQuery as Query;
 
+/**
+ * Class Model
+ * @package Enna\Orm
+ * @mixin Query
+ * @method void onAfterRead(Model $model) static after_read事件定义(查询后)
+ * @method void onBeforeInsert(Model $model) static before_insert事件定义(新增前)
+ * @method void onAfterInsert(Model $model) static after_insert事件定义(新增后)
+ * @method void onBeforeUpdate(Model $model) static before_update事件定义(更新前)
+ * @method void onAfterUpdate(Modle $model) static after_update事件定义(更新后)
+ * @method void onBeforeWrite(Model $model) static before_write事件定义(写入前)
+ * @method void onAfterWrite(Model $model) static after_write事件定义(写入后)
+ * @method void onBeforeDelete(Model $model) static before_delte事件定义(删除前)
+ * @method void onAfterDetele(Model $model) staic after_delete事件定义(删除后)
+ * @method void onBeforeRestore(Model $mdoel) static before_restore事件定义(恢复前)
+ * @method void onAfterRestore(Model $model) static after_restore事件定义(恢复后)
+ */
 abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonable
 {
     use Model\Concern\Attribute;
@@ -209,6 +224,15 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
     {
     }
 
+    protected function checkData()
+    {
+    }
+
+    protected function checkResult()
+    {
+
+    }
+
     /**
      * Note: 设置Db对象
      * Date: 2023-03-16
@@ -248,7 +272,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
             return $call($method instanceof Closure ? $method : Closure::fromCallable([$this, $method]), $vars);
         }
 
-        return call_user_func_array($method instanceof Closure ? $method : Closure::fromCallable([$this, $method]), $vars);
+        return call_user_func_array($method instanceof Closure ? $method : [$this, $method], $vars);
     }
 
     /**
@@ -271,10 +295,6 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
         $query->model($this)
             ->json($this->json, $this->jsonAssoc)
             ->setFieldType(array_merge($this->schema, $this->jsonType));
-
-        if (property_exists($this, 'withTrashed') && !$this->withTrashed) {
-            $this->withNoTrashed($query);
-        }
 
         if (is_array($scope)) {
             $globalScope = array_diff($this->globalScope, $scope);
@@ -309,7 +329,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
             return $model;
         }
 
-        $model->exist(true);
+        $model->exists(true);
 
         $model->setUpdateWhere($where);
 
@@ -594,9 +614,13 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
             return false;
         }
 
-        //获取数据
+        $this->checkData();
+
+        //获取有更新的数据
         $data = $this->getChangeData();
+
         if (empty($data)) {
+            //更新关联
             if (!empty($this->relationWrite)) {
                 $this->autoRelationUpdate();
             }
@@ -638,6 +662,8 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
                 ->field($allowFields)
                 ->update($data);
 
+            $this->checkResult($result);
+
             if (!empty($this->relationWrite)) {
                 $this->autoRelationUpdate();
             }
@@ -662,6 +688,8 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
         if ($this->trigger('BeforeInsert') === false) {
             return false;
         }
+
+        $this->checkData();
 
         //获取数据
         $data = $this->data;
@@ -689,7 +717,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
                 ->field($allowFields)
                 ->replace($this->replace)
                 ->sequence($sequence)
-                ->insert($data);
+                ->insert($data, true);
 
             if ($result) {
                 $pk = $this->getPk();
@@ -789,14 +817,20 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
 
         $result = $query->transaction(function () use ($replace, $dataSet) {
             $pk = $this->getPk();
-            if (is_string($pk) && $replace) {
-                $auto = true;
-            }
 
             $result = [];
             $suffix = $this->getSuffix();
             foreach ($dataSet as $key => $data) {
-                if ($this->exists || (!empty($auto) || isset($data[$pk]))) {
+                if ($replace) {
+                    $exists = true;
+                    foreach ((array)$pk as $field) {
+                        if (!isset($data[$field])) {
+                            $exists = false;
+                        }
+                    }
+                }
+
+                if ($replace && $exists) {
                     $result[$key] = static::update($data, [], [], $suffix);
                 } else {
                     $result[$key] = static::create($data, $this->field, $this->replace, $suffix);
@@ -918,6 +952,10 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
             $model->allowField($allowField);
         }
 
+        if (!empty($where)) {
+            $model->setUpdateWhere($where);
+        }
+
         if (!empty($suffix)) {
             $model->setSuffix($suffix);
         }
@@ -1021,7 +1059,7 @@ abstract class Model implements JsonSerializable, ArrayAccess, Arrayable, Jsonab
         }
 
         if (strtolower($method) == 'withattr') {
-            return call_user_func_array([$this, 'withAttribute'], $args);
+            return call_user_func_array([$this, 'withAttr'], $args);
         }
 
         return call_user_func_array([$this->db(), $method], $args);

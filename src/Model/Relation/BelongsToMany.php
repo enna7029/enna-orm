@@ -132,7 +132,9 @@ class BelongsToMany extends Relation
             ->select()
             ->setParent(clone $this->parent);
 
-        $this->hybridPivot($result);
+        foreach ($result as $model) {
+            $this->hybridPivot($model);
+        }
 
         return $this;
     }
@@ -141,27 +143,31 @@ class BelongsToMany extends Relation
      * Note: 合成中间表模型
      * Date: 2023-06-16
      * Time: 9:45
-     * @param iterable $models 集合
-     * @return void
+     * @param Model $models 模型对象
+     * @return array
      */
-    protected function hybridPivot(iterable $models)
+    protected function hybridPivot(Model $model)
     {
-        foreach ($models as $model) {
-            $pivot = [];
+        $pivot = [];
+        foreach ($model->getData() as $key => $val) {
+            if (strpos($key, '__')) {
+                [$name, $attr] = explode('__', $key, 2);
 
-            foreach ($model->getData() as $key => $val) {
-                if (strpos($key, '__')) {
-                    [$name, $attr] = explode('__', $key, 2);
-
-                    if ($name == 'pivot') {
-                        $pivot[$attr] = $vale;
-                        unset($model->$key);
-                    }
+                if ($name == 'pivot') {
+                    $pivot[$attr] = $vale;
+                    unset($model->$key);
                 }
             }
-
-            $model->setRelation($this->pivotDataName, $this->newPivot($pivot));
         }
+
+        $pivotData = $this->pivot->newInstance($pivot, [
+            [$this->localKey, '=', $this->parent->getKey(), null],
+            [$this->foreignKey, '=', $result->getKey(), null],
+        ]);
+
+        $model->setRelation($this->pivotDataName, $pivotData);
+
+        return $pivot;
     }
 
     /**
@@ -353,24 +359,12 @@ class BelongsToMany extends Relation
 
         $data = [];
         foreach ($list as $set) {
-            $pivot = [];
-            foreach ($set->getData() as $key => $val) {
-                if (strpos($key, '__')) {
-                    [$name, $attr] = explode('__', $key, 2);
-                    if ($name == 'pivot') {
-                        $pivot[$attr] = $val;
-                        unset($set->$key);
-                    }
-                }
-            }
-
+            $pivot = $this->hybridPivot($set);
             $key = $pivot[$this->localKey];
 
             if ($this->withLimit && isset($data[$key]) && count($data[$key]) >= $this->withLimit) {
                 continue;
             }
-
-            $this->setRelation($this->pivotDataName, $this->newPivot($pivot));
 
             $data[$key][] = $set;
         }
@@ -393,7 +387,7 @@ class BelongsToMany extends Relation
     {
         $pk = $result->getPk();
 
-        if (!isset($result[$pk])) {
+        if (!isset($result->$pk)) {
             return 0;
         }
 
@@ -425,7 +419,7 @@ class BelongsToMany extends Relation
         }
 
         return $this->belongsToManyQuery($this->foreignKey, $this->localKey, [
-            ['pivot.' . $this->foreignKey, 'exp', new Raw('=' . $this->parent->db(false)->getTable() . '.' . $this->parent->getPk())]
+            ['pivot.' . $this->localKey, 'exp', new Raw('=' . $this->parent->db(false)->getTable() . '.' . $this->parent->getPk())]
         ])->fetchSql()->$aggreate($field);
     }
 
@@ -497,8 +491,7 @@ class BelongsToMany extends Relation
             $ids = (array)$id;
             foreach ($ids as $id) {
                 $pivot[$this->foreignKey] = $id;
-                $this->pivot
-                    ->replace()
+                $this->pivot->replace()
                     ->exists(false)
                     ->data([])
                     ->save($pivot);
@@ -621,30 +614,6 @@ class BelongsToMany extends Relation
     }
 
     /**
-     * Note: 执行一次基础查询(仅执行一次)
-     * Date: 2023-06-16
-     * Time: 10:33
-     * @return void
-     */
-    protected function baseQuery()
-    {
-        if (empty($this->baseQuery)) {
-            $foreignKey = $this->foreignKey;
-            $localKey = $this->localKey;
-
-            if ($this->parent->getKey() === null) {
-                $condition = ['pivot.' . $localKey, 'exp', new Raw('=' . $this->parent->getTable() . '.' . $this->parent->getPk())];
-            } else {
-                $condition = ['pivot.' . $localKey, '=', $this->parent->getKey()];
-            }
-
-            $this->belongsToManyQuery($foreignKey, $localKey, [$condition]);
-
-            $this->baseQuery = true;
-        }
-    }
-
-    /**
      * Note: 关联查询
      * Date: 2023-06-16
      * Time: 11:15
@@ -676,5 +645,30 @@ class BelongsToMany extends Relation
         }
 
         return $this->query;
+    }
+
+
+    /**
+     * Note: 执行一次基础查询(仅执行一次)
+     * Date: 2023-06-16
+     * Time: 10:33
+     * @return void
+     */
+    protected function baseQuery()
+    {
+        if (empty($this->baseQuery)) {
+            $foreignKey = $this->foreignKey;
+            $localKey = $this->localKey;
+
+            if ($this->parent->getKey() === null) {
+                $condition = ['pivot.' . $localKey, 'exp', new Raw('=' . $this->parent->getTable() . '.' . $this->parent->getPk())];
+            } else {
+                $condition = ['pivot.' . $localKey, '=', $this->parent->getKey()];
+            }
+
+            $this->belongsToManyQuery($foreignKey, $localKey, [$condition]);
+
+            $this->baseQuery = true;
+        }
     }
 }

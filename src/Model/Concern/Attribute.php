@@ -10,6 +10,11 @@ use Enna\Framework\Helper\Str;
 use DateTime;
 use Closure;
 
+/**
+ * 模型数据处理
+ * Trait Attribute
+ * @package Enna\Orm\Model\Concern
+ */
 trait Attribute
 {
     /**
@@ -173,6 +178,22 @@ trait Attribute
     }
 
     /**
+     * Note: 获取实际的字段名:将驼峰转换为下划线
+     * Date: 2023-11-09
+     * Time: 15:53
+     * @param string $name
+     * @return string
+     */
+    protected function getRealFieldName(string $name)
+    {
+        if ($this->convertNameToCamel || !$this->strict) {
+            return Str::snake($name);
+        }
+
+        return $name;
+    }
+
+    /**
      * Note: 设置数据对象值
      * Date: 2023-05-15
      * Time: 17:05
@@ -183,14 +204,17 @@ trait Attribute
      */
     public function data(array $data, bool $set = false, array $allow = [])
     {
+        //清空数据
         $this->data = [];
 
+        //废弃字段
         foreach ($this->disuse as $key) {
             if (array_key_exists($key, $data)) {
                 unset($data[$key]);
             }
         }
 
+        //允许字段
         if (!empty($allow)) {
             $result = [];
             foreach ($allow as $name) {
@@ -202,6 +226,7 @@ trait Attribute
             $data = $result;
         }
 
+        //设置数据
         if ($set) {
             $this->setAttrs($data);
         } else {
@@ -231,6 +256,19 @@ trait Attribute
     }
 
     /**
+     * Note: 刷新对象原始数据为当前数据
+     * Date: 2023-11-09
+     * Time: 15:57
+     * @return $this
+     */
+    public function refreshOrigin()
+    {
+        $this->origin = $this->data;
+
+        return $this;
+    }
+
+    /**
      * Note: 获取对象的原始数据
      * Date: 2023-05-16
      * Time: 9:57
@@ -243,7 +281,9 @@ trait Attribute
             return $this->origin;
         }
 
-        return array_key_exists($name, $this->origin) ? $this->origin[$name] : null;
+        $fieldName = $this->getRealFieldName($name);
+
+        return array_key_exists($fieldName, $this->origin) ? $this->origin[$fieldName] : null;
     }
 
     /**
@@ -260,10 +300,12 @@ trait Attribute
             return $this->data;
         }
 
-        if (array_key_exists($name, $this->data)) {
-            return $this->data[$name];
-        } elseif (array_key_exists($name, $this->relation)) {
-            return $this->relation[$name];
+        $fieldName = $this->getRealFieldName($name);
+
+        if (array_key_exists($fieldName, $this->data)) {
+            return $this->data[$fieldName];
+        } elseif (array_key_exists($fieldName, $this->relation)) {
+            return $this->relation[$fieldName];
         }
 
         throw new InvalidArgumentException('property not exists:' . static::class . '->' . $name);
@@ -299,30 +341,19 @@ trait Attribute
     }
 
     /**
-     * Note: 获取器:设置数据字段
-     * Date: 2023-05-11
-     * Time: 17:15
-     * @param array|string $name 字段名
-     * @param callable $callback 闭包获取器
-     * @return $this
+     * Note: 直接设置数据对象值
+     * Date: 2023-05-15
+     * Time: 18:39
+     * @param string $name 属性
+     * @param mixed $value 值
+     * @return void
      */
-    public function withAttribute($name, callable $callback = null)
+    public function set(string $name, $value)
     {
-        if (is_array($name)) {
-            foreach ($name as $key => $val) {
-                $this->withAttribute($key, $val);
-            }
-        } else {
-            if (strpos($name, '.')) {
-                [$name, $key] = explode('.', $name);
+        $fieldName = $this->getRealFieldName($name);
 
-                $this->withAttr[$name][$key] = $callback;
-            } else {
-                $this->withAttr[$name] = $callback;
-            }
-        }
-
-        return $this;
+        $this->data[$fieldName] = $value;
+        unset($this->get[$fieldName]);
     }
 
     /**
@@ -341,6 +372,22 @@ trait Attribute
             $relation = $this->isRelationAttr($name);
             $value = null;
         }
+
+        return $this->getValue($name, $value, $relation);
+    }
+
+    /**
+     * Note: 获取经过获取器处理后的数据对象的值
+     * Date: 2023-11-09
+     * Time: 16:19
+     * @param string $name 字段名
+     * @param mixed $value 字段值
+     * @param bool|string $relation 是否关联属性或者关联名
+     * @return array|bool|float|int|mixed|\stdClass|null
+     */
+    protected function getValue(string $name, $value, $relation = false)
+    {
+        $name = $this->getRealFieldName($name);
 
         if (array_key_exists($name, $this->get)) {
             return $this->get[$name];
@@ -405,6 +452,10 @@ trait Attribute
      */
     protected function getJsonValue(string $name, $value)
     {
+        if (is_numeric($value)) {
+            return $value;
+        }
+
         foreach ($this->withAttr[$name] as $key => $closure) {
             if ($this->jsonAssoc) {
                 $value[$key] = $closure($value[$key], $this->data);
@@ -505,13 +556,15 @@ trait Attribute
      * Note: 修改器:设置数据值
      * Date: 2023-05-15
      * Time: 17:29
-     * @param string $name 字段名
-     * @param mixed $value 值
+     * @param string $name 属性名
+     * @param mixed $value 属性值
      * @param array $data 数据
      * @return void
      */
     public function setAttr(string $name, $value, array $data = [])
     {
+        $name = $this->getRealFieldName($name);
+
         $method = 'set' . Str::studly($name) . 'Attr';
 
         if (method_exists($this, $method)) {
@@ -524,22 +577,12 @@ trait Attribute
             }
         } elseif (isset($this->type[$name])) {
             $value = $this->writeTransform($value, $this->type[$name]);
+        } elseif ($this->isRelationAttr($name)) {
+            $this->relation[$name] = $value;
+        } elseif ((array_key_exists($name, $this->origin) || empty($this->origin)) && is_object($value) && method_exists($value, '__toString')) {
+            $value = $value->__toString();
         }
 
-        $this->data[$name] = $value;
-        unset($this->get[$name]);
-    }
-
-    /**
-     * Note: 直接设置数据对象值
-     * Date: 2023-05-15
-     * Time: 18:39
-     * @param string $name 属性
-     * @param mixed $value 值
-     * @return void
-     */
-    public function set(string $name, $value)
-    {
         $this->data[$name] = $value;
         unset($this->get[$name]);
     }
@@ -556,6 +599,10 @@ trait Attribute
     {
         if (is_null($value)) {
             return;
+        }
+
+        if ($value instanceof Raw) {
+            return $value;
         }
 
         if (is_array($type)) {
@@ -609,5 +656,34 @@ trait Attribute
         }
 
         return $value;
+    }
+
+    /**
+     * Note: 获取器:设置数据字段
+     * Date: 2023-05-11
+     * Time: 17:15
+     * @param array|string $name 字段名
+     * @param callable $callback 闭包获取器
+     * @return $this
+     */
+    public function withAttr($name, callable $callback = null)
+    {
+        if (is_array($name)) {
+            foreach ($name as $key => $val) {
+                $this->withAttr($key, $val);
+            }
+        } else {
+            $name = $this->getRealFieldName($name);
+
+            if (strpos($name, '.')) {
+                [$name, $key] = explode('.', $name);
+
+                $this->withAttr[$name][$key] = $callback;
+            } else {
+                $this->withAttr[$name] = $callback;
+            }
+        }
+
+        return $this;
     }
 }

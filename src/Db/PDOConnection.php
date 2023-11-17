@@ -832,7 +832,7 @@ class PDOConnection extends Connection
      */
     public function getRealSql(string $sql, array $bind = [])
     {
-        foreach ($sql as $key => $val) {
+        foreach ($bind as $key => $val) {
             $value = strval(is_array($val) ? $val[0] : $val);
             $type = is_array($val) ? $val[1] : PDO::PARAM_STR;
 
@@ -1101,6 +1101,7 @@ class PDOConnection extends Connection
         }
 
         $this->queryPDOStatement($query->master(true), $sql, $bind);
+
         if (!$origin && !empty($this->config['deploy']) && !empty($this->config['read_master'])) {
             $this->readMaster = true;
         }
@@ -1114,8 +1115,7 @@ class PDOConnection extends Connection
 
             if (!empty($key) && $this->cache->has($key)) {
                 $this->cache->delete($key);
-            }
-            if (!empty($tag) && method_exists($this->cache, 'tag')) {
+            } elseif (!empty($tag) && method_exists($this->cache, 'tag')) {
                 $this->cache->tag($tag)->clear();
             }
         }
@@ -1221,7 +1221,15 @@ class PDOConnection extends Connection
             $sequence = $options['sequence'] ?? null;
             $lastInsId = $this->getLastInsID($query, $sequence);
 
-            $this->trigger('after_insert', $query);
+            $data = $options['data'];
+            if ($lastInsId) {
+                $pk = $query->getAutoInc();
+                $data[$pk] = $lastInsId;
+            }
+
+            $query->setOption('data', $data);
+
+            $this->db->trigger('after_insert', $query);
 
             if ($getLastInsId && $lastInsId) {
                 return $lastInsId;
@@ -1437,6 +1445,7 @@ class PDOConnection extends Connection
     public function column(BaseQuery $query, $column, string $key = '')
     {
         $options = $query->parseOptions();
+
         if (isset($options['field'])) {
             $this->removeOption('field');
         }

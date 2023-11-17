@@ -70,6 +70,8 @@ trait ModelRelationQuery
     public function visible(array $visible)
     {
         $this->options['visible'] = $visible;
+
+        return $this;
     }
 
     /**
@@ -129,9 +131,11 @@ trait ModelRelationQuery
      */
     public function relation(array $relation)
     {
-        if (!empty($relation)) {
-            $this->options['relation'] = $relation;
+        if (empty($this->model) || empty($relation)) {
+            return $this;
         }
+
+        $this->options['relation'] = $relation;
 
         return $this;
     }
@@ -181,7 +185,11 @@ trait ModelRelationQuery
     public function withAttr($name, callable $callback = null)
     {
         if (is_array($name)) {
-            $this->options['with_attr'] = $name;
+            foreach ($name as $key => $val) {
+                $this->withAttr($key, $val);
+            }
+
+            return $this;
         } else {
             $this->options['with_attr'][$name] = $callback;
         }
@@ -198,9 +206,11 @@ trait ModelRelationQuery
      */
     public function with($with)
     {
-        if (!empty($with)) {
-            $this->options['with'] = (array)$with;
+        if (empty($this->model) || empty($with)) {
+            return $this;
         }
+
+        $this->options['with'] = (array)$with;
 
         return $this;
     }
@@ -215,7 +225,7 @@ trait ModelRelationQuery
      */
     public function withJoin($with, $joinType = '')
     {
-        if (empty($with)) {
+        if (empty($this->model) || empty($with)) {
             return $this;
         }
 
@@ -262,6 +272,10 @@ trait ModelRelationQuery
      */
     public function withCache($relation = true, $key = true, $expire = null, string $tag = null)
     {
+        if (empty($this->model)) {
+            return $this;
+        }
+
         if ($relation === false || $key === false || !$this->getConnection()->getCache()) {
             return $this;
         }
@@ -300,8 +314,12 @@ trait ModelRelationQuery
      */
     protected function withAggreate($relations, string $aggreate = 'count', $field = '*', bool $subQuery = true)
     {
+        if (empty($this->model)) {
+            return $this;
+        }
+
         if (!$subQuery) {
-            $this->options['with_count'][] = [$relations, $aggreate, $field];
+            $this->options['with_count'][] = [(array)$relations, $aggreate, $field];
         } else {
             if (!isset($this->options['field'])) {
                 $this->field('*');
@@ -491,7 +509,7 @@ trait ModelRelationQuery
 
         //动态获取器
         if (!empty($options['with_attr'])) {
-            $result->withAttribute($options['with_attr']);
+            $result->withAttr($options['with_attr']);
         }
 
         //输出属性控制
